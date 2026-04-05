@@ -14,6 +14,13 @@ from tqdm import tqdm
 # 数据加载
 import os
 
+# 尝试从 .env 文件加载环境变量
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv 未安装，跳过
+
 # 设置 HuggingFace 镜像（如果需要）
 # 取消下面这行的注释以使用镜像
 # os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
@@ -90,6 +97,19 @@ def load_hotpotqa(subset_size: Optional[int] = None) -> Tuple[List[Dict], List[D
         # HuggingFace 版本的字段格式
         # context: {'title': [...], 'sentences': [[...], ...]}
         # supporting_facts: {'title': [...], 'sent_id': [...]}
+        
+        # 提取该问题的候选文档（HotpotQA distractor 设置：每个问题10个候选文档）
+        titles = item["context"]["title"]
+        sentences_list = item["context"]["sentences"]
+        candidate_docs = []
+        for title, sentences in zip(titles, sentences_list):
+            doc_text = " ".join(sentences)
+            candidate_docs.append({
+                "id": title,
+                "title": title,
+                "text": doc_text,
+            })
+        
         example = {
             "id": item["id"],
             "question": item["question"],
@@ -100,6 +120,7 @@ def load_hotpotqa(subset_size: Optional[int] = None) -> Tuple[List[Dict], List[D
                 item["supporting_facts"]["title"],
                 item["supporting_facts"]["sent_id"]
             )),  # 转换为 [(title, sent_id), ...] 格式
+            "candidate_docs": candidate_docs,  # 每个问题的10个候选文档
         }
         examples.append(example)
         
