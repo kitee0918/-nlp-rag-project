@@ -1,0 +1,746 @@
+{
+  "bm25_llama_financebench": {
+    "config": {
+      "retriever": "bm25",
+      "generator": "llama",
+      "dataset": "financebench",
+      "top_k": 3
+    },
+    "metrics": {
+      "exact_match": 0.0,
+      "f1": 0.3466666666666667,
+      "recall@k": 1.0
+    },
+    "num_examples": 5,
+    "elapsed_time": 0.00046539306640625,
+    "results": [
+      {
+        "id": "fb_001",
+        "question": "What was Apple's total revenue in fiscal year 2023?",
+        "ground_truth": "Apple's total revenue was $383.3 billion.",
+        "prediction": "The amount is $383.3 billion.",
+        "em": 0.0,
+        "f1": 0.4,
+        "recall@k": 1.0
+      },
+      {
+        "id": "fb_002",
+        "question": "What is Microsoft's current ratio as of June 2023?",
+        "ground_truth": "Microsoft's current ratio was approximately 1.77.",
+        "prediction": "The ratio is approximately 1.77.",
+        "em": 0.0,
+        "f1": 0.6,
+        "recall@k": 1.0
+      },
+      {
+        "id": "fb_003",
+        "question": "What was NVIDIA's revenue growth in fiscal 2024?",
+        "ground_truth": "NVIDIA's revenue grew 126% in fiscal 2024.",
+        "prediction": "The amount is $45.4 billion.",
+        "em": 0.0,
+        "f1": 0.0,
+        "recall@k": 1.0
+      },
+      {
+        "id": "fb_004",
+        "question": "What is Amazon's operating income for Q4 2023?",
+        "ground_truth": "Amazon's operating income was $13.2 billion.",
+        "prediction": "The amount is $13.2 billion.",
+        "em": 0.0,
+        "f1": 0.4,
+        "recall@k": 1.0
+      },
+      {
+        "id": "fb_005",
+        "question": "What was Google's R&D spending in 2023?",
+        "ground_truth": "Google spent $45.4 billion on R&D in 2023.",
+        "prediction": "The amount is $45.4 billion.",
+        "em": 0.0,
+        "f1": 0.3333333333333333,
+        "recall@k": 1.0
+      }
+    ]
+  },
+  "bm25_llama_cuad": {
+    "config": {
+      "retriever": "bm25",
+      "generator": "llama",
+      "dataset": "cuad",
+      "top_k": 3
+    },
+    "metrics": {
+      "exact_match": 0.4,
+      "f1": 0.4,
+      "recall@k": 0.6
+    },
+    "num_examples": 5,
+    "elapsed_time": 0.0004253387451171875,
+    "results": [
+      {
+        "id": "cuad_001",
+        "question": "What is the termination date of the agreement?",
+        "ground_truth": "December 31, 2025",
+        "prediction": "This Agreement shall be governed by the laws of the State of Delaware.",
+        "em": 0.0,
+        "f1": 0.0,
+        "recall@k": 0.0
+      },
+      {
+        "id": "cuad_002",
+        "question": "What is the governing law of this contract?",
+        "ground_truth": "State of Delaware",
+        "prediction": "State of Delaware",
+        "em": 1.0,
+        "f1": 1.0,
+        "recall@k": 1.0
+      },
+      {
+        "id": "cuad_003",
+        "question": "What is the confidentiality period?",
+        "ground_truth": "5 years",
+        "prediction": "This Agreement shall be governed by the laws of the State of Delaware.",
+        "em": 0.0,
+        "f1": 0.0,
+        "recall@k": 1.0
+      },
+      {
+        "id": "cuad_004",
+        "question": "What is the maximum liability cap?",
+        "ground_truth": "$10 million",
+        "prediction": "$10 million",
+        "em": 1.0,
+        "f1": 1.0,
+        "recall@k": 1.0
+      },
+      {
+        "id": "cuad_005",
+        "question": "What is the notice period for termination?",
+        "ground_truth": "30 days",
+        "prediction": "Each party agrees to maintain confidentiality for a period of five (5) years.",
+        "em": 0.0,
+        "f1": 0.0,
+        "recall@k": 0.0
+      }
+    ]
+  },
+  "bm25_qwen_financebench": {
+    "config": {
+      "retriever": "bm25",
+      "generator": "qwen",
+      "dataset": "financebench",
+      "top_k": 3
+    },
+    "metrics": {
+      "exact_match": 0.0,
+      "f1": 0.3466666666666667,
+      "recall@k": 1.0
+    },
+    "num_examples": 5,
+    "elapsed_time": 0.00013637542724609375,
+    "results": [
+      {
+        "id": "fb_001",
+        "question": "What was Apple's total revenue in fiscal year 2023?",
+        "ground_truth": "Apple's total revenue was $383.3 billion.",
+        "prediction": "The amount is $383.3 billion.",
+        "em": 0.0,
+        "f1": 0.4,
+        "recall@k": 1.0
+      },
+      {
+        "id": "fb_002",
+        "question": "What is Microsoft's current ratio as of June 2023?",
+        "ground_truth": "Microsoft's current ratio was approximately 1.77.",
+        "prediction": "The ratio is approximately 1.77.",
+        "em": 0.0,
+        "f1": 0.6,
+        "recall@k": 1.0
+      },
+      {
+        "id": "fb_003",
+        "question": "What was NVIDIA's revenue growth in fiscal 2024?",
+        "ground_truth": "NVIDIA's revenue grew 126% in fiscal 2024.",
+        "prediction": "The amount is $45.4 billion.",
+        "em": 0.0,
+        "f1": 0.0,
+        "recall@k": 1.0
+      },
+      {
+        "id": "fb_004",
+        "question": "What is Amazon's operating income for Q4 2023?",
+        "ground_truth": "Amazon's operating income was $13.2 billion.",
+        "prediction": "The amount is $13.2 billion.",
+        "em": 0.0,
+        "f1": 0.4,
+        "recall@k": 1.0
+      },
+      {
+        "id": "fb_005",
+        "question": "What was Google's R&D spending in 2023?",
+        "ground_truth": "Google spent $45.4 billion on R&D in 2023.",
+        "prediction": "The amount is $45.4 billion.",
+        "em": 0.0,
+        "f1": 0.3333333333333333,
+        "recall@k": 1.0
+      }
+    ]
+  },
+  "bm25_qwen_cuad": {
+    "config": {
+      "retriever": "bm25",
+      "generator": "qwen",
+      "dataset": "cuad",
+      "top_k": 3
+    },
+    "metrics": {
+      "exact_match": 0.4,
+      "f1": 0.4,
+      "recall@k": 0.6
+    },
+    "num_examples": 5,
+    "elapsed_time": 0.000133514404296875,
+    "results": [
+      {
+        "id": "cuad_001",
+        "question": "What is the termination date of the agreement?",
+        "ground_truth": "December 31, 2025",
+        "prediction": "This Agreement shall be governed by the laws of the State of Delaware.",
+        "em": 0.0,
+        "f1": 0.0,
+        "recall@k": 0.0
+      },
+      {
+        "id": "cuad_002",
+        "question": "What is the governing law of this contract?",
+        "ground_truth": "State of Delaware",
+        "prediction": "State of Delaware",
+        "em": 1.0,
+        "f1": 1.0,
+        "recall@k": 1.0
+      },
+      {
+        "id": "cuad_003",
+        "question": "What is the confidentiality period?",
+        "ground_truth": "5 years",
+        "prediction": "This Agreement shall be governed by the laws of the State of Delaware.",
+        "em": 0.0,
+        "f1": 0.0,
+        "recall@k": 1.0
+      },
+      {
+        "id": "cuad_004",
+        "question": "What is the maximum liability cap?",
+        "ground_truth": "$10 million",
+        "prediction": "$10 million",
+        "em": 1.0,
+        "f1": 1.0,
+        "recall@k": 1.0
+      },
+      {
+        "id": "cuad_005",
+        "question": "What is the notice period for termination?",
+        "ground_truth": "30 days",
+        "prediction": "Each party agrees to maintain confidentiality for a period of five (5) years.",
+        "em": 0.0,
+        "f1": 0.0,
+        "recall@k": 0.0
+      }
+    ]
+  },
+  "contriever_llama_financebench": {
+    "config": {
+      "retriever": "contriever",
+      "generator": "llama",
+      "dataset": "financebench",
+      "top_k": 3
+    },
+    "metrics": {
+      "exact_match": 0.0,
+      "f1": 0.3466666666666667,
+      "recall@k": 1.0
+    },
+    "num_examples": 5,
+    "elapsed_time": 0.00016760826110839844,
+    "results": [
+      {
+        "id": "fb_001",
+        "question": "What was Apple's total revenue in fiscal year 2023?",
+        "ground_truth": "Apple's total revenue was $383.3 billion.",
+        "prediction": "The amount is $383.3 billion.",
+        "em": 0.0,
+        "f1": 0.4,
+        "recall@k": 1.0
+      },
+      {
+        "id": "fb_002",
+        "question": "What is Microsoft's current ratio as of June 2023?",
+        "ground_truth": "Microsoft's current ratio was approximately 1.77.",
+        "prediction": "The ratio is approximately 1.77.",
+        "em": 0.0,
+        "f1": 0.6,
+        "recall@k": 1.0
+      },
+      {
+        "id": "fb_003",
+        "question": "What was NVIDIA's revenue growth in fiscal 2024?",
+        "ground_truth": "NVIDIA's revenue grew 126% in fiscal 2024.",
+        "prediction": "The amount is $45.4 billion.",
+        "em": 0.0,
+        "f1": 0.0,
+        "recall@k": 1.0
+      },
+      {
+        "id": "fb_004",
+        "question": "What is Amazon's operating income for Q4 2023?",
+        "ground_truth": "Amazon's operating income was $13.2 billion.",
+        "prediction": "The amount is $13.2 billion.",
+        "em": 0.0,
+        "f1": 0.4,
+        "recall@k": 1.0
+      },
+      {
+        "id": "fb_005",
+        "question": "What was Google's R&D spending in 2023?",
+        "ground_truth": "Google spent $45.4 billion on R&D in 2023.",
+        "prediction": "The amount is $45.4 billion.",
+        "em": 0.0,
+        "f1": 0.3333333333333333,
+        "recall@k": 1.0
+      }
+    ]
+  },
+  "contriever_llama_cuad": {
+    "config": {
+      "retriever": "contriever",
+      "generator": "llama",
+      "dataset": "cuad",
+      "top_k": 3
+    },
+    "metrics": {
+      "exact_match": 0.4,
+      "f1": 0.4,
+      "recall@k": 0.6
+    },
+    "num_examples": 5,
+    "elapsed_time": 0.00016188621520996094,
+    "results": [
+      {
+        "id": "cuad_001",
+        "question": "What is the termination date of the agreement?",
+        "ground_truth": "December 31, 2025",
+        "prediction": "This Agreement shall be governed by the laws of the State of Delaware.",
+        "em": 0.0,
+        "f1": 0.0,
+        "recall@k": 0.0
+      },
+      {
+        "id": "cuad_002",
+        "question": "What is the governing law of this contract?",
+        "ground_truth": "State of Delaware",
+        "prediction": "State of Delaware",
+        "em": 1.0,
+        "f1": 1.0,
+        "recall@k": 1.0
+      },
+      {
+        "id": "cuad_003",
+        "question": "What is the confidentiality period?",
+        "ground_truth": "5 years",
+        "prediction": "This Agreement shall be governed by the laws of the State of Delaware.",
+        "em": 0.0,
+        "f1": 0.0,
+        "recall@k": 1.0
+      },
+      {
+        "id": "cuad_004",
+        "question": "What is the maximum liability cap?",
+        "ground_truth": "$10 million",
+        "prediction": "$10 million",
+        "em": 1.0,
+        "f1": 1.0,
+        "recall@k": 1.0
+      },
+      {
+        "id": "cuad_005",
+        "question": "What is the notice period for termination?",
+        "ground_truth": "30 days",
+        "prediction": "Each party agrees to maintain confidentiality for a period of five (5) years.",
+        "em": 0.0,
+        "f1": 0.0,
+        "recall@k": 0.0
+      }
+    ]
+  },
+  "contriever_qwen_financebench": {
+    "config": {
+      "retriever": "contriever",
+      "generator": "qwen",
+      "dataset": "financebench",
+      "top_k": 3
+    },
+    "metrics": {
+      "exact_match": 0.0,
+      "f1": 0.3466666666666667,
+      "recall@k": 1.0
+    },
+    "num_examples": 5,
+    "elapsed_time": 0.00014925003051757812,
+    "results": [
+      {
+        "id": "fb_001",
+        "question": "What was Apple's total revenue in fiscal year 2023?",
+        "ground_truth": "Apple's total revenue was $383.3 billion.",
+        "prediction": "The amount is $383.3 billion.",
+        "em": 0.0,
+        "f1": 0.4,
+        "recall@k": 1.0
+      },
+      {
+        "id": "fb_002",
+        "question": "What is Microsoft's current ratio as of June 2023?",
+        "ground_truth": "Microsoft's current ratio was approximately 1.77.",
+        "prediction": "The ratio is approximately 1.77.",
+        "em": 0.0,
+        "f1": 0.6,
+        "recall@k": 1.0
+      },
+      {
+        "id": "fb_003",
+        "question": "What was NVIDIA's revenue growth in fiscal 2024?",
+        "ground_truth": "NVIDIA's revenue grew 126% in fiscal 2024.",
+        "prediction": "The amount is $45.4 billion.",
+        "em": 0.0,
+        "f1": 0.0,
+        "recall@k": 1.0
+      },
+      {
+        "id": "fb_004",
+        "question": "What is Amazon's operating income for Q4 2023?",
+        "ground_truth": "Amazon's operating income was $13.2 billion.",
+        "prediction": "The amount is $13.2 billion.",
+        "em": 0.0,
+        "f1": 0.4,
+        "recall@k": 1.0
+      },
+      {
+        "id": "fb_005",
+        "question": "What was Google's R&D spending in 2023?",
+        "ground_truth": "Google spent $45.4 billion on R&D in 2023.",
+        "prediction": "The amount is $45.4 billion.",
+        "em": 0.0,
+        "f1": 0.3333333333333333,
+        "recall@k": 1.0
+      }
+    ]
+  },
+  "contriever_qwen_cuad": {
+    "config": {
+      "retriever": "contriever",
+      "generator": "qwen",
+      "dataset": "cuad",
+      "top_k": 3
+    },
+    "metrics": {
+      "exact_match": 0.4,
+      "f1": 0.4,
+      "recall@k": 0.6
+    },
+    "num_examples": 5,
+    "elapsed_time": 0.00015115737915039062,
+    "results": [
+      {
+        "id": "cuad_001",
+        "question": "What is the termination date of the agreement?",
+        "ground_truth": "December 31, 2025",
+        "prediction": "This Agreement shall be governed by the laws of the State of Delaware.",
+        "em": 0.0,
+        "f1": 0.0,
+        "recall@k": 0.0
+      },
+      {
+        "id": "cuad_002",
+        "question": "What is the governing law of this contract?",
+        "ground_truth": "State of Delaware",
+        "prediction": "State of Delaware",
+        "em": 1.0,
+        "f1": 1.0,
+        "recall@k": 1.0
+      },
+      {
+        "id": "cuad_003",
+        "question": "What is the confidentiality period?",
+        "ground_truth": "5 years",
+        "prediction": "This Agreement shall be governed by the laws of the State of Delaware.",
+        "em": 0.0,
+        "f1": 0.0,
+        "recall@k": 1.0
+      },
+      {
+        "id": "cuad_004",
+        "question": "What is the maximum liability cap?",
+        "ground_truth": "$10 million",
+        "prediction": "$10 million",
+        "em": 1.0,
+        "f1": 1.0,
+        "recall@k": 1.0
+      },
+      {
+        "id": "cuad_005",
+        "question": "What is the notice period for termination?",
+        "ground_truth": "30 days",
+        "prediction": "Each party agrees to maintain confidentiality for a period of five (5) years.",
+        "em": 0.0,
+        "f1": 0.0,
+        "recall@k": 0.0
+      }
+    ]
+  },
+  "hybrid_llama_financebench": {
+    "config": {
+      "retriever": "hybrid",
+      "generator": "llama",
+      "dataset": "financebench",
+      "top_k": 3
+    },
+    "metrics": {
+      "exact_match": 0.0,
+      "f1": 0.3466666666666667,
+      "recall@k": 1.0
+    },
+    "num_examples": 5,
+    "elapsed_time": 0.00020694732666015625,
+    "results": [
+      {
+        "id": "fb_001",
+        "question": "What was Apple's total revenue in fiscal year 2023?",
+        "ground_truth": "Apple's total revenue was $383.3 billion.",
+        "prediction": "The amount is $383.3 billion.",
+        "em": 0.0,
+        "f1": 0.4,
+        "recall@k": 1.0
+      },
+      {
+        "id": "fb_002",
+        "question": "What is Microsoft's current ratio as of June 2023?",
+        "ground_truth": "Microsoft's current ratio was approximately 1.77.",
+        "prediction": "The ratio is approximately 1.77.",
+        "em": 0.0,
+        "f1": 0.6,
+        "recall@k": 1.0
+      },
+      {
+        "id": "fb_003",
+        "question": "What was NVIDIA's revenue growth in fiscal 2024?",
+        "ground_truth": "NVIDIA's revenue grew 126% in fiscal 2024.",
+        "prediction": "The amount is $45.4 billion.",
+        "em": 0.0,
+        "f1": 0.0,
+        "recall@k": 1.0
+      },
+      {
+        "id": "fb_004",
+        "question": "What is Amazon's operating income for Q4 2023?",
+        "ground_truth": "Amazon's operating income was $13.2 billion.",
+        "prediction": "The amount is $13.2 billion.",
+        "em": 0.0,
+        "f1": 0.4,
+        "recall@k": 1.0
+      },
+      {
+        "id": "fb_005",
+        "question": "What was Google's R&D spending in 2023?",
+        "ground_truth": "Google spent $45.4 billion on R&D in 2023.",
+        "prediction": "The amount is $45.4 billion.",
+        "em": 0.0,
+        "f1": 0.3333333333333333,
+        "recall@k": 1.0
+      }
+    ]
+  },
+  "hybrid_llama_cuad": {
+    "config": {
+      "retriever": "hybrid",
+      "generator": "llama",
+      "dataset": "cuad",
+      "top_k": 3
+    },
+    "metrics": {
+      "exact_match": 0.4,
+      "f1": 0.4,
+      "recall@k": 0.6
+    },
+    "num_examples": 5,
+    "elapsed_time": 0.0001876354217529297,
+    "results": [
+      {
+        "id": "cuad_001",
+        "question": "What is the termination date of the agreement?",
+        "ground_truth": "December 31, 2025",
+        "prediction": "This Agreement shall be governed by the laws of the State of Delaware.",
+        "em": 0.0,
+        "f1": 0.0,
+        "recall@k": 0.0
+      },
+      {
+        "id": "cuad_002",
+        "question": "What is the governing law of this contract?",
+        "ground_truth": "State of Delaware",
+        "prediction": "State of Delaware",
+        "em": 1.0,
+        "f1": 1.0,
+        "recall@k": 1.0
+      },
+      {
+        "id": "cuad_003",
+        "question": "What is the confidentiality period?",
+        "ground_truth": "5 years",
+        "prediction": "This Agreement shall be governed by the laws of the State of Delaware.",
+        "em": 0.0,
+        "f1": 0.0,
+        "recall@k": 1.0
+      },
+      {
+        "id": "cuad_004",
+        "question": "What is the maximum liability cap?",
+        "ground_truth": "$10 million",
+        "prediction": "$10 million",
+        "em": 1.0,
+        "f1": 1.0,
+        "recall@k": 1.0
+      },
+      {
+        "id": "cuad_005",
+        "question": "What is the notice period for termination?",
+        "ground_truth": "30 days",
+        "prediction": "Each party agrees to maintain confidentiality for a period of five (5) years.",
+        "em": 0.0,
+        "f1": 0.0,
+        "recall@k": 0.0
+      }
+    ]
+  },
+  "hybrid_qwen_financebench": {
+    "config": {
+      "retriever": "hybrid",
+      "generator": "qwen",
+      "dataset": "financebench",
+      "top_k": 3
+    },
+    "metrics": {
+      "exact_match": 0.0,
+      "f1": 0.3466666666666667,
+      "recall@k": 1.0
+    },
+    "num_examples": 5,
+    "elapsed_time": 0.00019288063049316406,
+    "results": [
+      {
+        "id": "fb_001",
+        "question": "What was Apple's total revenue in fiscal year 2023?",
+        "ground_truth": "Apple's total revenue was $383.3 billion.",
+        "prediction": "The amount is $383.3 billion.",
+        "em": 0.0,
+        "f1": 0.4,
+        "recall@k": 1.0
+      },
+      {
+        "id": "fb_002",
+        "question": "What is Microsoft's current ratio as of June 2023?",
+        "ground_truth": "Microsoft's current ratio was approximately 1.77.",
+        "prediction": "The ratio is approximately 1.77.",
+        "em": 0.0,
+        "f1": 0.6,
+        "recall@k": 1.0
+      },
+      {
+        "id": "fb_003",
+        "question": "What was NVIDIA's revenue growth in fiscal 2024?",
+        "ground_truth": "NVIDIA's revenue grew 126% in fiscal 2024.",
+        "prediction": "The amount is $45.4 billion.",
+        "em": 0.0,
+        "f1": 0.0,
+        "recall@k": 1.0
+      },
+      {
+        "id": "fb_004",
+        "question": "What is Amazon's operating income for Q4 2023?",
+        "ground_truth": "Amazon's operating income was $13.2 billion.",
+        "prediction": "The amount is $13.2 billion.",
+        "em": 0.0,
+        "f1": 0.4,
+        "recall@k": 1.0
+      },
+      {
+        "id": "fb_005",
+        "question": "What was Google's R&D spending in 2023?",
+        "ground_truth": "Google spent $45.4 billion on R&D in 2023.",
+        "prediction": "The amount is $45.4 billion.",
+        "em": 0.0,
+        "f1": 0.3333333333333333,
+        "recall@k": 1.0
+      }
+    ]
+  },
+  "hybrid_qwen_cuad": {
+    "config": {
+      "retriever": "hybrid",
+      "generator": "qwen",
+      "dataset": "cuad",
+      "top_k": 3
+    },
+    "metrics": {
+      "exact_match": 0.4,
+      "f1": 0.4,
+      "recall@k": 0.6
+    },
+    "num_examples": 5,
+    "elapsed_time": 0.00019168853759765625,
+    "results": [
+      {
+        "id": "cuad_001",
+        "question": "What is the termination date of the agreement?",
+        "ground_truth": "December 31, 2025",
+        "prediction": "This Agreement shall be governed by the laws of the State of Delaware.",
+        "em": 0.0,
+        "f1": 0.0,
+        "recall@k": 0.0
+      },
+      {
+        "id": "cuad_002",
+        "question": "What is the governing law of this contract?",
+        "ground_truth": "State of Delaware",
+        "prediction": "State of Delaware",
+        "em": 1.0,
+        "f1": 1.0,
+        "recall@k": 1.0
+      },
+      {
+        "id": "cuad_003",
+        "question": "What is the confidentiality period?",
+        "ground_truth": "5 years",
+        "prediction": "This Agreement shall be governed by the laws of the State of Delaware.",
+        "em": 0.0,
+        "f1": 0.0,
+        "recall@k": 1.0
+      },
+      {
+        "id": "cuad_004",
+        "question": "What is the maximum liability cap?",
+        "ground_truth": "$10 million",
+        "prediction": "$10 million",
+        "em": 1.0,
+        "f1": 1.0,
+        "recall@k": 1.0
+      },
+      {
+        "id": "cuad_005",
+        "question": "What is the notice period for termination?",
+        "ground_truth": "30 days",
+        "prediction": "Each party agrees to maintain confidentiality for a period of five (5) years.",
+        "em": 0.0,
+        "f1": 0.0,
+        "recall@k": 0.0
+      }
+    ]
+  }
+}
