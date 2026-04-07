@@ -79,7 +79,7 @@ class Config:
     
     # 阿里百炼 API 配置
     # 请在此处填写你的 API Key，或通过环境变量设置
-    DASHSCOPE_API_KEY = os.environ.get("DASHSCOPE_API_KEY", "")
+    DASHSCOPE_API_KEY = os.environ.get("DASHSCOPE_API_KEY", "sk-0f66e1b456ab47f889da87e04a6512a6")
     DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     
     # 模型名称
@@ -110,6 +110,8 @@ def load_hotpotqa(subset_size: Optional[int] = None) -> Tuple[List[Dict], List[D
         print(f"使用镜像站点: {os.environ['HF_ENDPOINT']}")
     
     # 从 HuggingFace 加载
+    # "distractor" 是 HotpotQA 的困难模式：
+    # 每个问题有 10 个候选文档，其中只有 2 个是真正需要的支持文档，其他 8 个是干扰项
     dataset = load_dataset(Config.DATASET_NAME, "distractor", split=Config.DATASET_SPLIT)
     
     examples = []
@@ -374,25 +376,77 @@ class QwenGenerator:
         初始化生成器
         
         Args:
-            api_key: 阿里百炼 API Key
+            api_key: 阿里百炼 API Key（如未提供，将从环境变量 DASHSCOPE_API_KEY 读取）
             model: 模型名称
         """
+        # 获取 API key
         self.api_key = api_key or Config.DASHSCOPE_API_KEY
         self.model = model
         
+        # 调试：显示 API key 来源和内容预览
+        if api_key:
+            print(f"API key 来源: 参数传入")
+        else:
+            print(f"API key 来源: 环境变量 DASHSCOPE_API_KEY")
+        
         if not self.api_key:
-            raise ValueError("请设置 DASHSCOPE_API_KEY 环境变量或在 Config 中配置")
+            raise ValueError(
+                "未找到 API key！请通过以下方式之一设置：\n"
+                "1. 在 .env 文件中设置 DASHSCOPE_API_KEY=sk-xxx\n"
+                "2. 设置环境变量: export DASHSCOPE_API_KEY=sk-xxx\n"
+                "3. 直接传入参数: QwenGenerator(api_key='sk-xxx')"
+            )
+        
+        # 清理 API key（移除可能的空白字符和不可见字符）
+        self.api_key = self.api_key.strip()
+        
+        # 验证 API key 格式
+        # 1. 检查是否包含非 ASCII 字符
+        try:
+            self.api_key.encode('ascii')
+        except UnicodeEncodeError as e:
+            # 检查是否是中文占位符
+            has_chinese = any('\u4e00' <= c <= '\u9fff' for c in self.api_key)
+            if has_chinese:
+                print(f"\n{'='*60}")
+                print("错误: API key 包含中文字符！")
+                print(f"API key 内容: {repr(self.api_key[:20])}...")
+                print(f"{'='*60}")
+                print("可能的原因:")
+                print("  1. 环境变量 DASHSCOPE_API_KEY 被设置成了中文占位符")
+                print("  2. .env 文件内容不正确")
+                print("\n解决方法:")
+                print("  1. 检查远程服务器上的环境变量:")
+                print("     !echo $DASHSCOPE_API_KEY  # Linux/Mac")
+                print("     !echo %DASHSCOPE_API_KEY%  # Windows")
+                print("  2. 直接传入正确的 API key:")
+                print("     generator = QwenGenerator(api_key='sk-your-real-key')")
+                print(f"{'='*60}")
+            raise ValueError("API key 格式错误！请检查是否使用了正确的 API key")
+        
+        # 打印 API key 前4位用于调试（安全：不暴露完整 key）
+        print(f"API key 前缀: {self.api_key[:4]}... (长度: {len(self.api_key)})")
         
         # 配置 httpx 客户端以支持 UTF-8 编码
         http_client = httpx.Client(
             timeout=httpx.Timeout(60.0, connect=10.0),
         )
         
+        # 设置默认 headers，覆盖 OpenAI SDK 的 X-Stainless-* headers
+        # 这些 headers 可能包含系统信息，如果系统语言是中文，会导致 httpx 编码错误
+        default_headers = {
+            "x-stainless-os": "Linux",  # 覆盖默认的系统名称，避免中文编码问题
+            "x-stainless-arch": "x86_64",
+            "x-stainless-lang": "python",
+            "x-stainless-runtime": "CPython",
+        }
+        
         # 初始化 OpenAI 客户端（兼容阿里百炼 API）
         self.client = OpenAI(
             api_key=self.api_key,
             base_url=Config.DASHSCOPE_BASE_URL,
-            http_client=http_client
+            http_client=http_client,
+            default_headers=default_headers,
         )
         
         print(f"初始化 Qwen 生成器: {model}")
