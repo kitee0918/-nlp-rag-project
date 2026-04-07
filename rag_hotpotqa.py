@@ -270,10 +270,36 @@ class ContrieverRetriever:
         self.device = device
         self.model_name = model_name
         
-        # 加载模型
+        # 加载模型（带重试机制）
         print(f"加载 Contriever 模型: {model_name}")
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModel.from_pretrained(model_name)
+        max_retries = 10  # 增加重试次数
+        import time
+        for attempt in range(max_retries):
+            try:
+                print(f"  尝试加载 ({attempt + 1}/{max_retries})...")
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    model_name, 
+                    resume_download=True,
+                    force_download=False
+                )
+                self.model = AutoModel.from_pretrained(
+                    model_name, 
+                    resume_download=True,
+                    force_download=False
+                )
+                print("  模型加载成功！")
+                break
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    print(f"  加载失败: {type(e).__name__}")
+                    wait_time = 10 + attempt * 5  # 递增等待时间
+                    print(f"  等待 {wait_time} 秒后重试...")
+                    time.sleep(wait_time)
+                else:
+                    print(f"  加载模型失败，请检查网络连接")
+                    print(f"  提示: 如果本地网络不稳定，建议在 Colab 上运行")
+                    raise
+        
         self.model.to(device)
         self.model.eval()
         
@@ -808,3 +834,156 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# ============================================
+# Colab 专用：BM25 vs Contriever 对比实验
+# ============================================
+
+def run_comparison_experiment(
+    subset_size: int = 100,
+    top_k: int = 3,
+    model: str = "qwen-plus",
+    api_key: str = None,
+    device: str = None,
+    use_retrievers: List[str] = None
+) -> Dict:
+    """
+    Colab 专用函数：运行 BM25 vs Contriever 对比实验
+    
+    在 Colab 中直接调用：
+        from rag_hotpotqa import run_comparison_experiment
+        results = run_comparison_experiment(api_key="sk-xxx")
+        
+        # 快速调试：只用 BM25（跳过 Contriever 模型下载）
+        results = run_comparison_experiment(api_key="sk-xxx", use_retrievers=["bm25"])
+    
+    Args:
+        subset_size: 测试样本数量，默认 100
+        top_k: 检索文档数量，默认 3
+        model: Qwen 模型名称，默认 "qwen-plus"
+        api_key: DashScope API Key（如未提供，从环境变量读取）
+        device: 运行设备（默认自动检测）
+        use_retrievers: 要使用的检索器列表，可选 ["bm25", "contriever"]，默认两者都用
+        
+    Returns:
+        包含检索器评估结果的字典
+    """
+    # 设置 API Key
+    if api_key:
+        os.environ['DASHSCOPE_API_KEY'] = api_key
+    
+    # 检测设备
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    
+    print("=" * 70)
+    print("🚀 RAG 系统对比实验 - BM25 vs Contriever")
+    print("=" * 70)
+    print(f"测试样本: {subset_size}")
+    print(f"Top-K: {top_k}")
+    print(f"生成模型: {model}")
+    print(f"设备: {device}")
+    print("=" * 70)
+    
+    # 1. 加载数据
+    examples, corpus = load_hotpotqa(subset_size=subset_size)
+    
+    # 确保目录存在
+    os.makedirs(Config.CACHE_DIR, exist_ok=True)
+    os.makedirs(Config.RESULTS_DIR, exist_ok=True)
+    
+    # 默认使用两个检索器
+    if use_retrievers is None:
+        use_retrievers = ["bm25", "contriever"]
+    use_retrievers = [r.lower() for r in use_retrievers]
+    
+    # 2. 初始化检索器
+    print("\n" + "="*70)
+    print("📦 初始化检索器...")
+    print("="*70)
+    
+    retrievers = []
+    
+    # BM25
+    if "bm25" in use_retrievers:
+        print("\n[BM25] 初始化 BM25 检索器...")
+        bm25_cache = os.path.join(Config.CACHE_DIR, "bm25_index.pkl")
+        bm25_retriever = BM25Retriever(corpus, cache_path=bm25_cache)
+        retrievers.append(("BM25", bm25_retriever))
+    
+    # Contriever
+    if "contriever" in use_retrievers:
+        print("\n[Contriever] 初始化 Contriever 检索器...")
+        contriever_cache = os.path.join(Config.CACHE_DIR, "contriever_embeddings.pkl")
+        contriever_retriever = ContrieverRetriever(
+            corpus, 
+            cache_path=contriever_cache,
+            device=device
+        )
+        retrievers.append(("Contriever", contriever_retriever))
+    
+    # 3. 初始化生成器
+    print(f"\n🤖 初始化生成器: {model}")
+    generator = QwenGenerator(model=model)
+    
+    # 3. 运行实验
+    results = {}
+    
+    for name, retriever in retrievers:
+        print(f"\n{'='*70}")
+        print(f"🔬 测试配置: {name} + {model}")
+        print(f"{'='*70}")
+        
+        # 创建 RAG 系统
+        rag = RAGSystem(retriever, generator, top_k=top_k)
+        
+        # 评估
+        eval_result = evaluate(rag, examples)
+        results[name] = eval_result
+        
+        # 打印单次结果
+        print(f"\n📊 {name} 评估结果:")
+        print(f"   F1 Score:    {eval_result['f1_score']:.4f}")
+        print(f"   Recall@K:   {eval_result['recall@k']:.4f}")
+        print(f"   Precision@K: {eval_result['precision@k']:.4f}")
+        print(f"   F1@K:       {eval_result['f1@k']:.4f}")
+    
+    # 5. 保存结果
+    from datetime import datetime
+    result_file = os.path.join(
+        Config.RESULTS_DIR, 
+        f"comparison_{subset_size}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    )
+    with open(result_file, 'w', encoding='utf-8') as f:
+        json.dump(list(results.values()), f, ensure_ascii=False, indent=2)
+    print(f"\n💾 结果已保存至: {result_file}")
+    
+    # 6. 对比展示
+    print("\n" + "="*70)
+    print("📈 最终对比结果")
+    print("="*70)
+    print(f"{'检索器':<15} {'F1 Score':<12} {'Recall@K':<12} {'Precision@K':<14} {'F1@K':<12}")
+    print("-"*70)
+    for name, r in results.items():
+        print(f"{r['retriever']:<15} {r['f1_score']:<12.4f} {r['recall@k']:<12.4f} {r['precision@k']:<14.4f} {r['f1@k']:<12.4f}")
+    print("="*70)
+    
+    # 找出最佳检索器
+    best_recall = max(results.keys(), key=lambda k: results[k]['recall@k'])
+    best_f1k = max(results.keys(), key=lambda k: results[k]['f1@k'])
+    best_f1 = max(results.keys(), key=lambda k: results[k]['f1_score'])
+    
+    print(f"\n🏆 最佳 Recall@K: {best_recall} ({results[best_recall]['recall@k']:.4f})")
+    print(f"🏆 最佳 F1@K:     {best_f1k} ({results[best_f1k]['f1@k']:.4f})")
+    print(f"🏆 最佳 F1 Score: {best_f1} ({results[best_f1]['f1_score']:.4f})")
+    
+    # 计算提升幅度
+    recall_improve = (results['Contriever']['recall@k'] - results['BM25']['recall@k']) / results['BM25']['recall@k'] * 100 if results['BM25']['recall@k'] > 0 else 0
+    f1k_improve = (results['Contriever']['f1@k'] - results['BM25']['f1@k']) / results['BM25']['f1@k'] * 100 if results['BM25']['f1@k'] > 0 else 0
+    
+    print(f"\n📊 Contriever vs BM25 提升:")
+    print(f"   Recall@K: {'+' if recall_improve >= 0 else ''}{recall_improve:.2f}%")
+    print(f"   F1@K:     {'+' if f1k_improve >= 0 else ''}{f1k_improve:.2f}%")
+    
+    return results
