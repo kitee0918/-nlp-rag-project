@@ -5,6 +5,28 @@
 """
 
 import os
+import sys
+
+# 设置环境变量确保 UTF-8 编码
+os.environ['PYTHONIOENCODING'] = 'utf-8'
+os.environ['PYTHONUTF8'] = '1'
+
+# 强制设置 stdout/stderr 编码为 UTF-8（适用于所有平台）
+def _setup_utf8_output():
+    """设置 UTF-8 输出编码"""
+    if hasattr(sys.stdout, 'reconfigure'):
+        try:
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
+    if hasattr(sys.stderr, 'reconfigure'):
+        try:
+            sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
+
+_setup_utf8_output()
+
 import json
 import pickle
 import argparse
@@ -180,7 +202,7 @@ class BM25Retriever:
         else:
             print("构建 BM25 索引...")
             # 简单分词
-            self.tokenized_corpus = [doc.lower().split() for doc in tqdm(self.corpus)]
+            self.tokenized_corpus = [doc.lower().split() for doc in tqdm(self.corpus, ascii=False)]
             self.bm25 = BM25Okapi(self.tokenized_corpus)
             
             # 保存缓存
@@ -279,7 +301,7 @@ class ContrieverRetriever:
         """编码文本为嵌入向量"""
         all_embeddings = []
         
-        for i in tqdm(range(0, len(texts), batch_size), desc="编码文档"):
+        for i in tqdm(range(0, len(texts), batch_size), desc="编码文档", ascii=False):
             batch_texts = texts[i:i + batch_size]
             
             # Tokenize
@@ -418,12 +440,17 @@ class QwenGenerator:
             }
             
         except Exception as e:
-            print(f"生成错误: {e}")
+            # 安全打印错误信息（处理 Windows 控制台编码问题）
+            error_msg = str(e)
+            try:
+                print(f"生成错误: {error_msg}")
+            except UnicodeEncodeError:
+                print(f"生成错误: {error_msg.encode('utf-8', errors='replace').decode('utf-8')}")
             return {
-                "answer": f"生成失败: {str(e)}",
+                "answer": f"生成失败: {error_msg}",
                 "prompt": prompt,
                 "model": self.model,
-                "error": str(e)
+                "error": error_msg
             }
     
     def get_name(self) -> str:
@@ -487,7 +514,7 @@ class RAGSystem:
     def batch_answer(self, questions: List[str]) -> List[Dict]:
         """批量回答问题"""
         results = []
-        for question in tqdm(questions, desc="处理问题"):
+        for question in tqdm(questions, desc="处理问题", ascii=False):
             result = self.answer(question)
             results.append(result)
         return results
@@ -497,15 +524,15 @@ class RAGSystem:
 # 评估指标
 # ============================================
 
-def compute_exact_match(prediction: str, ground_truth: str) -> bool:
-    """计算精确匹配"""
-    pred_normalized = prediction.lower().strip()
-    truth_normalized = ground_truth.lower().strip()
-    return pred_normalized == truth_normalized
+# def compute_exact_match(prediction: str, ground_truth: str) -> bool:
+#     """计算精确匹配 - 对于 finance/law 领域过于严苛，已弃用"""
+#     pred_normalized = prediction.lower().strip()
+#     truth_normalized = ground_truth.lower().strip()
+#     return pred_normalized == truth_normalized
 
 
 def compute_f1(prediction: str, ground_truth: str) -> float:
-    """计算 F1 分数（词级别）"""
+    """计算 F1 分数（词级别）- 用于生成答案评估"""
     pred_tokens = set(prediction.lower().split())
     truth_tokens = set(ground_truth.lower().split())
     
@@ -523,27 +550,51 @@ def compute_f1(prediction: str, ground_truth: str) -> float:
     return f1
 
 
-def compute_recall_at_k(retrieved_docs: List[Dict], supporting_facts: List[List]) -> bool:
+def compute_retrieval_metrics(retrieved_docs: List[Dict], supporting_facts: List[List]) -> Dict[str, float]:
     """
-    计算检索召回率（是否检索到至少一个支持文档）
+    计算检索指标：Recall@K, Precision@K, F1@K
+    
+    适用于 finance/law 等领域，这些领域对检索质量更关注
     
     Args:
         retrieved_docs: 检索到的文档列表
         supporting_facts: 支持事实列表 [[title, sent_id], ...]
         
     Returns:
-        是否召回至少一个支持文档
+        包含 recall@k, precision@k, f1@k 的字典
     """
     # 提取支持文档的标题
     supporting_titles = set(fact[0] for fact in supporting_facts)
     retrieved_titles = set(doc['id'] for doc in retrieved_docs)
     
-    return bool(supporting_titles & retrieved_titles)
+    # 计算交集
+    hit_titles = supporting_titles & retrieved_titles
+    
+    # Recall@K: 命中的支持文档数 / 总支持文档数
+    recall = len(hit_titles) / len(supporting_titles) if supporting_titles else 0.0
+    
+    # Precision@K: 命中的文档数 / 检索的文档数
+    precision = len(hit_titles) / len(retrieved_titles) if retrieved_titles else 0.0
+    
+    # F1@K: Recall 和 Precision 的调和平均
+    if recall + precision > 0:
+        f1 = 2 * recall * precision / (recall + precision)
+    else:
+        f1 = 0.0
+    
+    return {
+        'recall@k': recall,
+        'precision@k': precision,
+        'f1@k': f1
+    }
 
 
 def evaluate(rag_system: RAGSystem, examples: List[Dict]) -> Dict:
     """
     评估 RAG 系统
+    
+    使用检索指标（Recall@K, Precision@K, F1@K）评估，
+    更适合 finance/law 等领域
     
     Args:
         rag_system: RAG 系统实例
@@ -554,26 +605,32 @@ def evaluate(rag_system: RAGSystem, examples: List[Dict]) -> Dict:
     """
     print(f"\n开始评估 {rag_system.retriever.get_name()} + {rag_system.generator.get_name()}...")
     
-    em_scores = []
     f1_scores = []
     recall_scores = []
+    precision_scores = []
+    f1_at_k_scores = []
     
-    for example in tqdm(examples, desc="评估中"):
+    for example in tqdm(examples, desc="评估中", ascii=False):
         result = rag_system.answer(example['question'])
         
-        # 计算指标
-        em = compute_exact_match(result['answer'], example['answer'])
+        # 计算生成答案的 F1 分数
         f1 = compute_f1(result['answer'], example['answer'])
-        recall = compute_recall_at_k(result['retrieved_documents'], example['supporting_facts'])
-        
-        em_scores.append(em)
         f1_scores.append(f1)
-        recall_scores.append(recall)
+        
+        # 计算检索指标
+        retrieval_metrics = compute_retrieval_metrics(
+            result['retrieved_documents'], 
+            example['supporting_facts']
+        )
+        recall_scores.append(retrieval_metrics['recall@k'])
+        precision_scores.append(retrieval_metrics['precision@k'])
+        f1_at_k_scores.append(retrieval_metrics['f1@k'])
     
     return {
-        "exact_match": sum(em_scores) / len(em_scores),
         "f1_score": sum(f1_scores) / len(f1_scores),
-        "recall_at_k": sum(recall_scores) / len(recall_scores),
+        "recall@k": sum(recall_scores) / len(recall_scores),
+        "precision@k": sum(precision_scores) / len(precision_scores),
+        "f1@k": sum(f1_at_k_scores) / len(f1_at_k_scores),
         "num_examples": len(examples),
         "retriever": rag_system.retriever.get_name(),
         "generator": rag_system.generator.get_name()
@@ -597,7 +654,8 @@ def main():
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",
                         help="运行设备")
     
-    args = parser.parse_args()
+    # 使用 parse_known_args() 以兼容 Jupyter/Colab 环境
+    args, _ = parser.parse_known_args()
     
     print("=" * 60)
     print("RAG 系统实验")
@@ -650,9 +708,10 @@ def main():
         
         # 打印结果
         print(f"\n评估结果:")
-        print(f"  Exact Match: {eval_result['exact_match']:.4f}")
-        print(f"  F1 Score: {eval_result['f1_score']:.4f}")
-        print(f"  Recall@K: {eval_result['recall_at_k']:.4f}")
+        print(f"  F1 Score:    {eval_result['f1_score']:.4f}")
+        print(f"  Recall@K:    {eval_result['recall@k']:.4f}")
+        print(f"  Precision@K: {eval_result['precision@k']:.4f}")
+        print(f"  F1@K:        {eval_result['f1@k']:.4f}")
     
     # 5. 保存结果
     result_file = os.path.join(
@@ -667,11 +726,11 @@ def main():
     if len(results) > 1:
         print("\n" + "=" * 60)
         print("检索方法对比:")
-        print("=" * 60)
-        print(f"{'检索器':<15} {'Exact Match':<15} {'F1 Score':<15} {'Recall@K':<15}")
-        print("-" * 60)
+        print("=" * 80)
+        print(f"{'检索器':<12} {'F1 Score':<12} {'Recall@K':<12} {'Precision@K':<12} {'F1@K':<12}")
+        print("-" * 80)
         for r in results:
-            print(f"{r['retriever']:<15} {r['exact_match']:<15.4f} {r['f1_score']:<15.4f} {r['recall_at_k']:<15.4f}")
+            print(f"{r['retriever']:<12} {r['f1_score']:<12.4f} {r['recall@k']:<12.4f} {r['precision@k']:<12.4f} {r['f1@k']:<12.4f}")
 
 
 if __name__ == "__main__":
