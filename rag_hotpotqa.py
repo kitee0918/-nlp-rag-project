@@ -30,6 +30,7 @@ _setup_utf8_output()
 import json
 import pickle
 import argparse
+import traceback
 from typing import List, Dict, Tuple, Optional
 from tqdm import tqdm
 
@@ -57,6 +58,7 @@ from transformers import AutoTokenizer, AutoModel
 
 # 生成相关
 from openai import OpenAI
+import httpx
 
 # ============================================
 # 配置部分
@@ -381,10 +383,16 @@ class QwenGenerator:
         if not self.api_key:
             raise ValueError("请设置 DASHSCOPE_API_KEY 环境变量或在 Config 中配置")
         
+        # 配置 httpx 客户端以支持 UTF-8 编码
+        http_client = httpx.Client(
+            timeout=httpx.Timeout(60.0, connect=10.0),
+        )
+        
         # 初始化 OpenAI 客户端（兼容阿里百炼 API）
         self.client = OpenAI(
             api_key=self.api_key,
-            base_url=Config.DASHSCOPE_BASE_URL
+            base_url=Config.DASHSCOPE_BASE_URL,
+            http_client=http_client
         )
         
         print(f"初始化 Qwen 生成器: {model}")
@@ -442,15 +450,26 @@ class QwenGenerator:
         except Exception as e:
             # 安全打印错误信息（处理 Windows 控制台编码问题）
             error_msg = str(e)
+            error_type = type(e).__name__
+            
+            # 打印详细错误信息和堆栈（仅第一次错误时打印完整堆栈）
             try:
-                print(f"生成错误: {error_msg}")
+                print(f"\n生成错误 [{error_type}]: {error_msg}")
+                # 打印完整堆栈以定位问题
+                tb_lines = traceback.format_exc().split('\n')
+                for line in tb_lines[-5:]:  # 只打印最后5行
+                    if line.strip():
+                        print(f"  {line}")
             except UnicodeEncodeError:
-                print(f"生成错误: {error_msg.encode('utf-8', errors='replace').decode('utf-8')}")
+                safe_msg = error_msg.encode('ascii', errors='replace').decode('ascii')
+                print(f"\n生成错误 [{error_type}]: {safe_msg}")
+            
             return {
-                "answer": f"生成失败: {error_msg}",
+                "answer": "",  # 返回空字符串而非错误信息，避免影响 F1 计算
                 "prompt": prompt,
                 "model": self.model,
-                "error": error_msg
+                "error": error_msg,
+                "error_type": error_type
             }
     
     def get_name(self) -> str:
