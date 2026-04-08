@@ -154,65 +154,69 @@ def load_financebench(subset_size: Optional[int] = None) -> Tuple[List[Dict], Li
     
     examples = []
     corpus = []
-    seen_docs = set()
-    
-    for item in dataset:
+        
+    for idx, item in enumerate(dataset):
         # 提取证据文档
         # evidence 是一个列表，通常包含一个或多个证据片段
         evidence_list = item.get("evidence", [])
         if not evidence_list:
             continue
-        
+            
         # 构建证据文档文本（合并所有证据片段）
         evidence_texts = []
-        evidence_doc_names = set()
         for ev in evidence_list:
             if isinstance(ev, dict):
-                ev_text = ev.get("evidence_text", "") or ev.get("evidence_text_full_page", "")
-                ev_doc_name = ev.get("doc_name", item.get("doc_name", "unknown"))
+                # 优先使用 evidence_text_full_page（更完整）
+                ev_text = ev.get("evidence_text_full_page", "") or ev.get("evidence_text", "")
                 if ev_text:
                     evidence_texts.append(ev_text)
-                    evidence_doc_names.add(ev_doc_name)
-        
-        
+            
         # 主要文档名
         doc_name = item.get("doc_name", "unknown")
-        
+        financebench_id = item.get("financebench_id", str(idx))
+            
+        # 证据文档 ID（使用问题ID作为唯一标识）
+        evidence_doc_id = f"{financebench_id}"
+            
         # 构建示例
         example = {
-            "id": item.get("financebench_id", str(len(examples))),
+            "id": financebench_id,
             "question": item["question"],
             "answer": item["answer"],
             "company": item.get("company", ""),
             "doc_name": doc_name,
             "doc_type": item.get("doc_type", ""),
             "question_type": item.get("question_type", ""),
-            "evidence_doc": doc_name,  # 用于检索评估的正确文档
+            "evidence_doc": evidence_doc_id,  # 用于检索评估：每个问题对应唯一的证据片段
             "evidence_text": " ".join(evidence_texts) if evidence_texts else "",
         }
         examples.append(example)
+            
+        # 构建语料库：每个问题的证据作为单独的文档
+        # 这样检索就变成了：在所有证据片段中找到正确的那个
+        doc_text = " ".join(evidence_texts) if evidence_texts else ""
+        if doc_text:
+            corpus.append({
+                "id": evidence_doc_id,  # 使用问题ID作为文档ID
+                "title": f"{doc_name} - Q{idx+1}",
+                "text": doc_text,
+                "metadata": {
+                    "company": item.get("company", ""),
+                    "doc_type": item.get("doc_type", ""),
+                    "doc_link": item.get("doc_link", ""),
+                    "doc_name": doc_name,
+                    "question": item["question"][:100]  # 保存问题前100字符作为参考
+                }
+            })
         
-        # 构建语料库（从 evidence 构建文档）
-        if doc_name not in seen_docs:
-            doc_text = " ".join(evidence_texts) if evidence_texts else ""
-            if doc_text:  # 只添加有内容的文档
-                corpus.append({
-                    "id": doc_name,
-                    "title": doc_name,
-                    "text": doc_text,
-                    "metadata": {
-                        "company": item.get("company", ""),
-                        "doc_type": item.get("doc_type", ""),
-                        "doc_link": item.get("doc_link", "")
-                    }
-                })
-                seen_docs.add(doc_name)
-    
     # 限制样本数量
     if subset_size and subset_size < len(examples):
         examples = examples[:subset_size]
-    
-    print(f"加载完成: {len(examples)} 个问题, {len(corpus)} 篇文档")
+        # 同时限制语料库
+        example_ids = set(ex["id"] for ex in examples)
+        corpus = [doc for doc in corpus if doc["id"] in example_ids]
+        
+    print(f"加载完成: {len(examples)} 个问题, {len(corpus)} 篇文档 (证据片段级别)")
     return examples, corpus
 
 
@@ -232,7 +236,7 @@ def _load_sample_financebench(subset_size: Optional[int] = None) -> Tuple[List[D
             "doc_name": "Apple_2023_10K",
             "doc_type": "10k",
             "question_type": "metrics-generated",
-            "evidence_doc": "Apple_2023_10K",
+            "evidence_doc": "fb_001",  # 使用问题ID
             "evidence_text": "Apple Inc. reported total net sales of $383.3 billion for the fiscal year ended September 30, 2023. iPhone accounted for $200.6 billion, Services for $85.2 billion.",
         },
         {
@@ -243,7 +247,7 @@ def _load_sample_financebench(subset_size: Optional[int] = None) -> Tuple[List[D
             "doc_name": "Microsoft_2023_10K",
             "doc_type": "10k",
             "question_type": "metrics-generated",
-            "evidence_doc": "Microsoft_2023_10K",
+            "evidence_doc": "fb_002",  # 使用问题ID
             "evidence_text": "Microsoft Corporation had total current assets of $184.3 billion and total current liabilities of $103.9 billion as of June 30, 2023.",
         },
         {
@@ -254,7 +258,7 @@ def _load_sample_financebench(subset_size: Optional[int] = None) -> Tuple[List[D
             "doc_name": "NVIDIA_2024_10K",
             "doc_type": "10k",
             "question_type": "metrics-generated",
-            "evidence_doc": "NVIDIA_2024_10K",
+            "evidence_doc": "fb_003",  # 使用问题ID
             "evidence_text": "NVIDIA reported revenue of $60.9 billion for fiscal year 2024, up 126% from $26.9 billion in fiscal year 2023.",
         },
         {
@@ -265,7 +269,7 @@ def _load_sample_financebench(subset_size: Optional[int] = None) -> Tuple[List[D
             "doc_name": "Amazon_2023_10K",
             "doc_type": "10k",
             "question_type": "metrics-generated",
-            "evidence_doc": "Amazon_2023_10K",
+            "evidence_doc": "fb_004",  # 使用问题ID
             "evidence_text": "Amazon.com reported operating income of $36.9 billion for the fiscal year ended December 31, 2023, compared to $12.2 billion in 2022.",
         },
         {
@@ -276,32 +280,33 @@ def _load_sample_financebench(subset_size: Optional[int] = None) -> Tuple[List[D
             "doc_name": "Alphabet_2023_10K",
             "doc_type": "10k",
             "question_type": "metrics-generated",
-            "evidence_doc": "Alphabet_2023_10K",
+            "evidence_doc": "fb_005",  # 使用问题ID
             "evidence_text": "Alphabet Inc. reported total revenues of $307.4 billion for the fiscal year ended December 31, 2023, an increase of 9% compared to 2022.",
         },
     ]
-    
+        
     examples = sample_data[:subset_size] if subset_size else sample_data
-    
-    # 构建语料库
+        
+    # 构建语料库：每个问题的证据作为单独的文档
     corpus = []
-    seen_docs = set()
     for ex in sample_data:
-        doc_name = ex["doc_name"]
-        if doc_name not in seen_docs:
-            corpus.append({
-                "id": doc_name,
-                "title": doc_name,
-                "text": ex["evidence_text"],
-                "metadata": {
-                    "company": ex["company"],
-                    "doc_type": ex["doc_type"]
-                }
-            })
-            seen_docs.add(doc_name)
-    
-    
-    print(f"加载完成: {len(examples)} 个问题, {len(corpus)} 篇文档")
+        corpus.append({
+            "id": ex["evidence_doc"],  # 使用问题ID
+            "title": f"{ex['doc_name']} - {ex['id']}",
+            "text": ex["evidence_text"],
+            "metadata": {
+                "company": ex["company"],
+                "doc_type": ex["doc_type"],
+                "doc_name": ex["doc_name"],
+            }
+        })
+        
+    # 限制语料库
+    if subset_size:
+        example_ids = set(ex["id"] for ex in examples)
+        corpus = [doc for doc in corpus if doc["id"] in example_ids]
+        
+    print(f"加载完成: {len(examples)} 个问题, {len(corpus)} 篇文档 (证据片段级别)")
     return examples, corpus
 
 
