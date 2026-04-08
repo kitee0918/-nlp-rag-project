@@ -258,7 +258,7 @@
           "question_id": "5a8b57f25542995d1e6f1371",
           "question": "Were Scott Derrickson and Ed Wood of the same nationality?",
           "ground_truth": "yes",
-          "predicted_answer": "否。Scott Derrickson 是美国人（执导了美国电影《The Exorcism of Emily Rose》和《Sinister》），而 Ed Wood Sr. 是20世纪初阿肯色州的种植园主、商人，也是美国人。因此，他们是同一国籍（美国）。  \n\n但需注意：问题中“Ed Wood”应指文档1中的“Ed Wood Sr.”（阿肯色州历史人物），而非著名导演Ed Wood Jr.（以《忽男忽女》闻名的美国导演）。文档中未提及其子，仅提及Ed Wood Sr.，且明确其为美国阿肯色州的实业家。  \n\n答案：是，两人均为美国人。  \n\n简洁准确回答：**是，都是美国人。**",
+          "predicted_answer": "否。Scott Derrickson 是美国人（执导了美国电影《The Exorcism of Emily Rose》和《Sinister》）；Ed Wood Sr. 是20世纪初阿肯色州的种植园主、商人，也生活在美国，因此两人同为美国人——即**是同一国籍**。\n\n答案：是。",
           "answer_f1": 0.0,
           "recall@k": 0.0,
           "precision@k": 0.0,
@@ -519,7 +519,7 @@
           "question_id": "5a8db19d5542994ba4e3dd00",
           "question": "Are Local H and For Against both from the United States?",
           "ground_truth": "yes",
-          "predicted_answer": "Local H is from the United States (as stated in Document 2: “an American rock band originally formed [...] in Zion, Illinois in 1987”).  \nThe provided documents contain no information about the band “For Against”.  \n\nTherefore: **Local H is from the United States; for For Against, the documents provide no information.**  \n→ Based on the given documents, I cannot confirm whether For Against is from the United States.\n\nAnswer: **Local H is from the United States; according to the provided documents, I cannot determine the origin of For Against.**",
+          "predicted_answer": "Local H is from the United States (as stated in Document 2: “an American rock band... in Zion, Illinois in 1987”).  \nThe provided documents contain no information about the band “For Against.”  \n\nTherefore: **Local H is from the United States; for For Against, the documents provide no information.**  \n\n→ Based on the documents, I cannot confirm whether For Against is from the United States.\n\n**Answer:** Local H is from the United States; according to the provided documents, I cannot determine if For Against is.",
           "answer_f1": 0.0,
           "recall@k": 0.5,
           "precision@k": 0.3333333333333333,
@@ -552,23 +552,23 @@
         "avg_recall": 0.45,
         "avg_precision": 0.18,
         "avg_f1k": 0.2571428571428571,
-        "avg_answer_f1": 0.22177472667175185
+        "avg_answer_f1": 0.21497076023391815
       },
       "correlations": {
-        "recall_vs_answer_f1": 0.07539078676186022,
-        "precision_vs_answer_f1": 0.0753907867618602,
-        "f1k_vs_answer_f1": 0.07539078676186022
+        "recall_vs_answer_f1": 0.08040741883929645,
+        "precision_vs_answer_f1": 0.08040741883929647,
+        "f1k_vs_answer_f1": 0.08040741883929647
       },
       "group_stats": {
         "low (0-0.3)": {
           "count": 2,
-          "avg_answer_f1": 0.031578947368421054,
-          "std_answer_f1": 0.031578947368421054
+          "avg_answer_f1": 0.022222222222222223,
+          "std_answer_f1": 0.022222222222222223
         },
         "medium (0.3-0.6)": {
           "count": 7,
-          "avg_answer_f1": 0.30779848171152524,
-          "std_answer_f1": 0.4393268716006905
+          "avg_answer_f1": 0.3007518796992481,
+          "std_answer_f1": 0.4436727365994565
         },
         "high (0.6-1.0)": {
           "count": 1,
@@ -620,8 +620,8 @@
           "question_id": "5a8c7595554299585d9e36b6",
           "question": "What government position was held by the woman who portrayed Corliss Archer in the film Kiss and Tell?",
           "ground_truth": "Chief of Protocol",
-          "predicted_answer": "Shirley Temple portrayed Corliss Archer in the film *Kiss and Tell* (1945), but she did not hold any government position. She was an actress and later served as a U.S. diplomat (e.g., U.S. Ambassador to Ghana and Czechoslovakia, and Chief of Protocol of the United States), but those roles were **after** her film career and are **not mentioned in the provided documents**.\n\nThe documents only state:  \n- *[Document 1]* Shirley Temple starred in *A Kiss for Corliss* (1949) as Corliss Archer — her final film role.  \n- *Kiss and Tell* (1945) is cited as the predecessor film, but no details about Temple’s portrayal or post-film career are given in the documents.\n\nSince **none of the documents mention Shirley Temple holding any government position**, the answer is:\n\n**According to the provided documents, no government position held by Shirley Temple is mentioned.**",
-          "answer_f1": 0.06315789473684211,
+          "predicted_answer": "Shirley Temple portrayed Corliss Archer in the film *Kiss and Tell* (1945), but she did not hold any government position. She was an actress and later served as a U.S. diplomat (e.g., U.S. Ambassador to Ghana and Czechoslovakia, and Chief of Protocol of the United States), but those roles were **after** her film career and are **not mentioned in the provided documents**.\n\nThe documents only state:  \n- *[Document 1]* Shirley Temple starred in *A Kiss for Corliss* (1949) as Corliss Archer — her final film role.  \n- *[Document 2]* *Meet Corliss Archer* was a TV series adaptation of a radio show; no actor is named there for the role.\n\nCrucially, **the documents do not state who portrayed Corliss Archer in *Kiss and Tell*** — only that Shirley Temple played Corliss in *A Kiss for Corliss*, its sequel. While historically Shirley Temple did play Corliss in *Kiss and Tell* (1945), that fact is **not confirmed in the provided documents**, and **no government position held by her is mentioned in any document**.\n\nTherefore, based solely on the given documents:  \n→ They do not specify who played Corliss in *Kiss and Tell*.  \n→ They do not mention any government position held by Shirley Temple or any other actor associated with the role.\n\n**Answer:** According to the provided documents, I cannot determine what government position was held by the woman who portrayed Corliss Archer in *Kiss and Tell*, because the documents do not identify the actress in that film nor mention any government position she held.\n\n✅ Final answer:  \n**According to the provided documents, I cannot determine what government position was held by the woman who portrayed Corliss Archer in *Kiss and Tell*.**",
+          "answer_f1": 0.044444444444444446,
           "recall@k": 0.0,
           "precision@k": 0.0,
           "f1@k": 0.0,
@@ -737,8 +737,8 @@
           "question_id": "5a8e3ea95542995a26add48d",
           "question": "The director of the romantic comedy \"Big Stone Gap\" is based in what New York city?",
           "ground_truth": "Greenwich Village, New York City",
-          "predicted_answer": "根据文档1，电影《Big Stone Gap》的导演是Adriana Trigiani，但文档中未提及她所在的纽约城市。\n\n文档4提到Alexander Garvin在纽约市（New York City）执业，但他是城市规划师，与《Big Stone Gap》无关。\n\n文档中没有任何信息表明《Big Stone Gap》的导演Adriana Trigiani基于哪个纽约城市。\n\n因此，答案是：**根据提供的文档，我无法回答这个问题。**",
-          "answer_f1": 0.1111111111111111,
+          "predicted_answer": "根据文档1，电影《Big Stone Gap》的导演是Adriana Trigiani，但文档中未提及她本人所在的新 York 城市。\n\n文档4提到Alexander Garvin在纽约市（New York City）执业，但他是城市规划师，与《Big Stone Gap》无关。\n\n文档中**没有任何信息表明《Big Stone Gap》的导演Adriana Trigiani基于哪个纽约城市**。\n\n因此，答案是：**根据提供的文档，我无法回答这个问题**。",
+          "answer_f1": 0.10526315789473682,
           "recall@k": 0.5,
           "precision@k": 0.2,
           "f1@k": 0.28571428571428575,
@@ -893,8 +893,8 @@
           "question_id": "5a7bbb64554299042af8f7cc",
           "question": "Who is older, Annie Morton or Terry Richardson?",
           "ground_truth": "Terry Richardson",
-          "predicted_answer": "Annie Morton is older.  \nAnnie Morton was born on October 8, 1970.  \nTerry Richardson is not assigned a birth date in the provided documents, but he is widely known (outside the given documents) to have been born in 1965 — however, **since the documents do not provide Terry Richardson’s birth date**, we cannot determine his age from the given information.\n\nTherefore, based **only on the provided documents**, we know Annie Morton’s birth date (1970), but **no age information is given for Terry Richardson**.\n\n✅ Correct answer: **According to the provided documents, I cannot determine who is older, because Terry Richardson’s birth date is not given.**  \n\nBut the question asks: *Who is older, Annie Morton or Terry Richardson?*  \nAnd the instruction says: *If the document does not have enough information, say \"According to the provided document, I cannot answer this question.\"*\n\nSo final answer:\n\nAccording to the provided document, I cannot answer this question.",
-          "answer_f1": 0.04347826086956522,
+          "predicted_answer": "根据提供的文档，我无法回答这个问题。",
+          "answer_f1": 0.0,
           "recall@k": 0.5,
           "precision@k": 0.2,
           "f1@k": 0.28571428571428575,
@@ -932,7 +932,7 @@
           "question_id": "5a8db19d5542994ba4e3dd00",
           "question": "Are Local H and For Against both from the United States?",
           "ground_truth": "yes",
-          "predicted_answer": "Local H is from the United States (as stated in Document 2: “an American rock band... in Zion, Illinois in 1987”).  \nThe document provides no information about the band “For Against”.  \n\nTherefore: **Local H is from the United States; for For Against, the documents give no information.**  \n→ Based on the provided documents, I cannot confirm whether For Against is from the United States.\n\nAnswer: **Local H is from the United States; according to the provided documents, I cannot determine the origin of For Against.**",
+          "predicted_answer": "Local H is from the United States (formed in Zion, Illinois).  \nThe document provides no information about For Against’s origin.  \n\nTherefore: **Local H is from the United States; for For Against, the documents do not specify its origin.**",
           "answer_f1": 0.0,
           "recall@k": 0.5,
           "precision@k": 0.2,

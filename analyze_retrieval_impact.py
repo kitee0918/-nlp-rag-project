@@ -25,6 +25,12 @@ from rag_hotpotqa import (
 
 import torch
 
+# 可视化
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans', 'Arial Unicode MS']
+matplotlib.rcParams['axes.unicode_minus'] = False
+
 
 # ============================================
 # 配置
@@ -39,7 +45,7 @@ class AnalysisConfig:
     TOP_K_LIST = [1, 3, 5]
     
     # 检索器列表
-    RETRIEVERS = ["bm25", "contriever"]  # BM25 和 Contriever 对比
+    RETRIEVERS = ["bm25"]  # 当前环境 Contriever 有兼容问题，先用 BM25
     
     # 生成模型
     MODEL = "qwen-plus"
@@ -297,6 +303,15 @@ def run_analysis_experiment(
                 else:
                     print(f"   {group_name}: n=0")
             
+            # 可视化
+            print(f"\n📊 生成可视化图表...")
+            plot_recall_vs_answer_f1(detailed_results, retriever_name, top_k, AnalysisConfig.OUTPUT_DIR)
+            plot_group_analysis(group_stats, retriever_name, top_k, AnalysisConfig.OUTPUT_DIR)
+            
+            # 案例分析
+            cases = analyze_cases(detailed_results, retriever_name, top_k)
+            print_case_analysis(cases, retriever_name, top_k)
+            
             retriever_results.append({
                 'top_k': top_k,
                 'detailed_results': detailed_results,
@@ -307,7 +322,8 @@ def run_analysis_experiment(
                     'avg_answer_f1': avg_answer_f1
                 },
                 'correlations': correlations,
-                'group_stats': group_stats
+                'group_stats': group_stats,
+                'cases_summary': {k: len(v) for k, v in cases.items()}
             })
         
         all_results[retriever_name] = retriever_results
@@ -336,7 +352,231 @@ def run_analysis_experiment(
     
     print(f"\n💾 结果已保存至: {output_file}")
     
+    # 6. 生成对比可视化
+    print(f"\n📊 生成检索器对比图表...")
+    plot_retriever_comparison(all_results, AnalysisConfig.OUTPUT_DIR)
+    
+    # 7. 总结报告
+    print("\n" + "="*70)
+    print("📋 分析总结")
+    print("="*70)
+    for retriever_name, retriever_results in all_results.items():
+        print(f"\n【{retriever_name.upper()}】")
+        for result in retriever_results:
+            top_k = result['top_k']
+            summary = result['summary']
+            corr = result['correlations']
+            print(f"  Top-{top_k}: Recall={summary['avg_recall']:.2f}, "
+                  f"Precision={summary['avg_precision']:.2f}, "
+                  f"Answer F1={summary['avg_answer_f1']:.2f}, "
+                  f"相关性={corr['recall_vs_answer_f1']:.3f}")
+    
     return all_results
+
+
+# ============================================
+# 可视化函数
+# ============================================
+
+def plot_recall_vs_answer_f1(data: List[Dict], retriever_name: str, top_k: int, output_dir: str):
+    """
+    绘制 Recall@K vs Answer F1 散点图
+    """
+    recall_arr = [d['recall@k'] for d in data]
+    answer_f1_arr = [d['answer_f1'] for d in data]
+    
+    plt.figure(figsize=(8, 6))
+    plt.scatter(recall_arr, answer_f1_arr, alpha=0.6, s=100, c='steelblue', edgecolors='white')
+    
+    # 添加趋势线
+    if len(recall_arr) > 1:
+        z = np.polyfit(recall_arr, answer_f1_arr, 1)
+        p = np.poly1d(z)
+        x_line = np.linspace(0, 1, 100)
+        plt.plot(x_line, p(x_line), 'r--', alpha=0.8, label=f'趋势线 (斜率={z[0]:.2f})')
+    
+    plt.xlabel('Recall@K', fontsize=12)
+    plt.ylabel('Answer F1', fontsize=12)
+    plt.title(f'{retriever_name} - Top-{top_k}: Recall vs Answer Quality', fontsize=14)
+    plt.xlim(-0.05, 1.05)
+    plt.ylim(-0.05, 1.05)
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    
+    # 计算相关系数
+    corr = np.corrcoef(recall_arr, answer_f1_arr)[0, 1] if len(recall_arr) > 1 else 0
+    plt.text(0.05, 0.95, f'Pearson r = {corr:.3f}', transform=plt.gca().transAxes, fontsize=11)
+    
+    output_path = os.path.join(output_dir, f'scatter_{retriever_name}_top{top_k}.png')
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f"   散点图已保存: {output_path}")
+
+
+def plot_retriever_comparison(results: Dict, output_dir: str):
+    """
+    绘制不同检索器的对比柱状图
+    """
+    retrievers = list(results.keys())
+    metrics = ['avg_recall', 'avg_precision', 'avg_answer_f1']
+    metric_labels = ['Recall@K', 'Precision@K', 'Answer F1']
+    
+    # 收集数据
+    all_top_k = set()
+    for r in retrievers:
+        for item in results[r]:
+            all_top_k.add(item['top_k'])
+    top_k_list = sorted(all_top_k)
+    
+    x = np.arange(len(top_k_list))
+    width = 0.35
+    
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    
+    for idx, (metric, label) in enumerate(zip(metrics, metric_labels)):
+        ax = axes[idx]
+        
+        for i, retriever in enumerate(retrievers):
+            values = []
+            for tk in top_k_list:
+                found = False
+                for item in results[retriever]:
+                    if item['top_k'] == tk:
+                        if metric == 'avg_answer_f1':
+                            values.append(item['summary']['avg_answer_f1'])
+                        else:
+                            values.append(item['summary'][metric])
+                        found = True
+                        break
+                if not found:
+                    values.append(0)
+            
+            bars = ax.bar(x + i * width, values, width, label=retriever.upper(), alpha=0.8)
+        
+        ax.set_xlabel('Top-K', fontsize=11)
+        ax.set_ylabel(label, fontsize=11)
+        ax.set_title(f'{label} 对比', fontsize=12)
+        ax.set_xticks(x + width / 2)
+        ax.set_xticklabels([f'Top-{k}' for k in top_k_list])
+        ax.legend()
+        ax.set_ylim(0, 1.1)
+        ax.grid(True, alpha=0.3, axis='y')
+    
+    plt.tight_layout()
+    output_path = os.path.join(output_dir, 'retriever_comparison.png')
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f"\n📊 对比柱状图已保存: {output_path}")
+
+
+def plot_group_analysis(group_stats: Dict, retriever_name: str, top_k: int, output_dir: str):
+    """
+    绘制按 Recall 分组的答案质量柱状图
+    """
+    groups = list(group_stats.keys())
+    avg_f1 = [group_stats[g]['avg_answer_f1'] for g in groups]
+    counts = [group_stats[g]['count'] for g in groups]
+    
+    fig, ax1 = plt.subplots(figsize=(10, 5))
+    
+    x = np.arange(len(groups))
+    bars = ax1.bar(x, avg_f1, alpha=0.7, color='steelblue', label='Avg Answer F1')
+    ax1.set_xlabel('Recall Group', fontsize=11)
+    ax1.set_ylabel('Average Answer F1', fontsize=11, color='steelblue')
+    ax1.set_ylim(0, 1.0)
+    ax1.tick_params(axis='y', labelcolor='steelblue')
+    
+    # 添加样本数标签
+    for bar, count in zip(bars, counts):
+        height = bar.get_height()
+        ax1.annotate(f'n={count}',
+                    xy=(bar.get_x() + bar.get_width() / 2, height),
+                    xytext=(0, 3),
+                    textcoords="offset points",
+                    ha='center', va='bottom', fontsize=10)
+    
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(groups, rotation=15)
+    ax1.set_title(f'{retriever_name} - Top-{top_k}: 分组分析', fontsize=13)
+    ax1.grid(True, alpha=0.3, axis='y')
+    
+    plt.tight_layout()
+    output_path = os.path.join(output_dir, f'group_{retriever_name}_top{top_k}.png')
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f"   分组柱状图已保存: {output_path}")
+
+
+# ============================================
+# 案例分析函数
+# ============================================
+
+def analyze_cases(data: List[Dict], retriever_name: str, top_k: int) -> Dict:
+    """
+    分析典型案例：
+    1. 检索好但答案差（应该答对但没答对）
+    2. 检索差但答案好（侥幸答对）
+    """
+    cases = {
+        'good_retrieval_bad_answer': [],
+        'bad_retrieval_good_answer': [],
+        'good_both': [],
+        'bad_both': []
+    }
+    
+    for d in data:
+        recall = d['recall@k']
+        answer_f1 = d['answer_f1']
+        
+        # 定义阈值
+        good_retrieval = recall >= 0.5
+        good_answer = answer_f1 >= 0.3
+        
+        if good_retrieval and not good_answer:
+            cases['good_retrieval_bad_answer'].append(d)
+        elif not good_retrieval and good_answer:
+            cases['bad_retrieval_good_answer'].append(d)
+        elif good_retrieval and good_answer:
+            cases['good_both'].append(d)
+        else:
+            cases['bad_both'].append(d)
+    
+    return cases
+
+
+def print_case_analysis(cases: Dict, retriever_name: str, top_k: int):
+    """
+    打印案例分析结果
+    """
+    print(f"\n{'='*70}")
+    print(f"📋 案例分析: {retriever_name} - Top-{top_k}")
+    print(f"{'='*70}")
+    
+    print(f"\n{'类别':<30} {'数量':<10}")
+    print("-" * 40)
+    for case_type, case_list in cases.items():
+        print(f"{case_type:<30} {len(case_list):<10}")
+    
+    # 打印典型案例详情
+    def print_case_detail(case, index):
+        print(f"\n  案例 {index + 1}:")
+        print(f"    问题: {case['question'][:60]}...")
+        print(f"    标准答案: {case['ground_truth']}")
+        print(f"    预测答案: {case['predicted_answer'][:80]}...")
+        print(f"    Recall@K: {case['recall@k']:.2f}, Answer F1: {case['answer_f1']:.2f}")
+        print(f"    检索文档: {[doc['id'] for doc in case['retrieved_docs'][:3]]}")
+    
+    # 检索好但答案差
+    if cases['good_retrieval_bad_answer']:
+        print(f"\n🔍 '检索好但答案差' 典型案例 (前2个):")
+        for i, case in enumerate(cases['good_retrieval_bad_answer'][:2]):
+            print_case_detail(case, i)
+    
+    # 检索差但答案好
+    if cases['bad_retrieval_good_answer']:
+        print(f"\n🔍 '检索差但答案好' 典型案例 (前2个):")
+        for i, case in enumerate(cases['bad_retrieval_good_answer'][:2]):
+            print_case_detail(case, i)
 
 
 # ============================================
