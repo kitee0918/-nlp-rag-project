@@ -1,7 +1,13 @@
 """
-原生 RAG 系统实现 - 基于 HotpotQA 数据集
+原生 RAG 系统实现 - 基于 FinanceBench 数据集
 支持 BM25 和 Contriever 两种检索方法
 支持通过阿里百炼 API 调用 Qwen 模型
+
+FinanceBench 数据格式说明:
+- 数据集: PatronusAI/financebench (150 条金融问答)
+- 字段: financebench_id, company, doc_name, question, answer, evidence, doc_type, doc_link
+- 特点: 单文档检索（无多跳结构），证据来源为财务报告（10-K/10-Q）
+- 语料库: 从 evidence 字段构建，每个问题的证据文本作为文档
 """
 
 import os
@@ -75,9 +81,9 @@ except ImportError:
 class Config:
     """全局配置"""
     # 数据集
-    DATASET_NAME = "hotpotqa/hotpot_qa"
-    DATASET_SPLIT = "validation"  # 使用 validation 分割（dev 集）
-    SUBSET_SIZE = 100  # 测试样本数量
+    DATASET_NAME = "PatronusAI/financebench"  # FinanceBench 数据集
+    DATASET_SPLIT = "train"  # FinanceBench 只有 train split (150条)
+    SUBSET_SIZE = 50  # 测试样本数量（默认50条）
     
     # 检索配置
     RETRIEVAL_K = 3  # 每次检索返回 top-k 文档
@@ -107,85 +113,193 @@ class Config:
 # 数据加载模块
 # ============================================
 
-def load_hotpotqa(subset_size: Optional[int] = None) -> Tuple[List[Dict], List[Dict]]:
+def load_financebench(subset_size: Optional[int] = None) -> Tuple[List[Dict], List[Dict]]:
     """
-    加载 HotpotQA dev 数据集
+    加载 FinanceBench 数据集
+    
+    FinanceBench 数据格式:
+    - financebench_id: 唯一标识符
+    - company: 公司名称
+    - doc_name: 文档名称 (如 "3M_2018_10K")
+    - question: 问题文本
+    - answer: 答案
+    - evidence: 证据列表，包含 evidence_text, doc_name, evidence_page_num 等
+    - doc_type: 文档类型 (10k/10q)
+    - doc_link: 文档链接
+    
+    与 HotpotQA 的差异:
+    - 无多跳结构（每个问题只有一个证据文档）
+    - 无干扰项（开放域检索场景）
+    - 语料库从 evidence 字段构建
     
     Returns:
         examples: QA 示例列表
         corpus: 文档语料库
     """
-    print(f"正在加载 HotpotQA 数据集...")
+    print(f"正在加载 FinanceBench 数据集...")
     
     # 设置镜像站点（如果需要）
     if 'HF_ENDPOINT' not in os.environ:
         os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
         print(f"使用镜像站点: {os.environ['HF_ENDPOINT']}")
     
-    # 从 HuggingFace 加载
-    # "distractor" 是 HotpotQA 的困难模式：
-    # 每个问题有 10 个候选文档，其中只有 2 个是真正需要的支持文档，其他 8 个是干扰项
-    dataset = load_dataset(Config.DATASET_NAME, "distractor", split=Config.DATASET_SPLIT)
+    try:
+        # 从 HuggingFace 加载 FinanceBench
+        dataset = load_dataset(Config.DATASET_NAME, split=Config.DATASET_SPLIT)
+        print(f"成功加载 {len(dataset)} 条数据")
+    except Exception as e:
+        print(f"从 HuggingFace 加载失败: {e}")
+        print("使用本地示例数据进行测试...")
+        return _load_sample_financebench(subset_size)
     
     examples = []
     corpus = []
     seen_docs = set()
     
     for item in dataset:
+        # 提取证据文档
+        # evidence 是一个列表，通常包含一个或多个证据片段
+        evidence_list = item.get("evidence", [])
+        if not evidence_list:
+            continue
+        
+        # 构建证据文档文本（合并所有证据片段）
+        evidence_texts = []
+        evidence_doc_names = set()
+        for ev in evidence_list:
+            if isinstance(ev, dict):
+                ev_text = ev.get("evidence_text", "") or ev.get("evidence_text_full_page", "")
+                ev_doc_name = ev.get("doc_name", item.get("doc_name", "unknown"))
+                if ev_text:
+                    evidence_texts.append(ev_text)
+                    evidence_doc_names.add(ev_doc_name)
+        
+        
+        # 主要文档名
+        doc_name = item.get("doc_name", "unknown")
+        
         # 构建示例
-        # HuggingFace 版本的字段格式
-        # context: {'title': [...], 'sentences': [[...], ...]}
-        # supporting_facts: {'title': [...], 'sent_id': [...]}
-        
-        # 提取该问题的候选文档（HotpotQA distractor 设置：每个问题10个候选文档）
-        titles = item["context"]["title"]
-        sentences_list = item["context"]["sentences"]
-        candidate_docs = []
-        for title, sentences in zip(titles, sentences_list):
-            doc_text = " ".join(sentences)
-            candidate_docs.append({
-                "id": title,
-                "title": title,
-                "text": doc_text,
-            })
-        
         example = {
-            "id": item["id"],
+            "id": item.get("financebench_id", str(len(examples))),
             "question": item["question"],
             "answer": item["answer"],
-            "type": item["type"],
-            "level": item["level"],
-            "supporting_facts": list(zip(
-                item["supporting_facts"]["title"],
-                item["supporting_facts"]["sent_id"]
-            )),  # 转换为 [(title, sent_id), ...] 格式
-            "candidate_docs": candidate_docs,  # 每个问题的10个候选文档
+            "company": item.get("company", ""),
+            "doc_name": doc_name,
+            "doc_type": item.get("doc_type", ""),
+            "question_type": item.get("question_type", ""),
+            "evidence_doc": doc_name,  # 用于检索评估的正确文档
+            "evidence_text": " ".join(evidence_texts) if evidence_texts else "",
         }
         examples.append(example)
         
-        # 构建语料库（从 context 中提取文档）
-        # context 格式: {'title': [title1, title2, ...], 'sentences': [[sent1, sent2, ...], ...]}
-        titles = item["context"]["title"]
-        sentences_list = item["context"]["sentences"]
-        
-        for title, sentences in zip(titles, sentences_list):
-            doc_id = title
-            if doc_id not in seen_docs:
-                doc_text = " ".join(sentences)
+        # 构建语料库（从 evidence 构建文档）
+        if doc_name not in seen_docs:
+            doc_text = " ".join(evidence_texts) if evidence_texts else ""
+            if doc_text:  # 只添加有内容的文档
                 corpus.append({
-                    "id": doc_id,
-                    "title": title,
+                    "id": doc_name,
+                    "title": doc_name,
                     "text": doc_text,
                     "metadata": {
-                        "level": item["level"],
-                        "type": item["type"]
+                        "company": item.get("company", ""),
+                        "doc_type": item.get("doc_type", ""),
+                        "doc_link": item.get("doc_link", "")
                     }
                 })
-                seen_docs.add(doc_id)
+                seen_docs.add(doc_name)
     
     # 限制样本数量
     if subset_size and subset_size < len(examples):
         examples = examples[:subset_size]
+    
+    print(f"加载完成: {len(examples)} 个问题, {len(corpus)} 篇文档")
+    return examples, corpus
+
+
+def _load_sample_financebench(subset_size: Optional[int] = None) -> Tuple[List[Dict], List[Dict]]:
+    """
+    加载示例 FinanceBench 数据（离线模式）
+    当无法从 HuggingFace 加载时使用
+    """
+    print("加载本地示例数据...")
+    
+    sample_data = [
+        {
+            "id": "fb_001",
+            "question": "What was Apple's total revenue in fiscal year 2023?",
+            "answer": "$383.3 billion",
+            "company": "Apple",
+            "doc_name": "Apple_2023_10K",
+            "doc_type": "10k",
+            "question_type": "metrics-generated",
+            "evidence_doc": "Apple_2023_10K",
+            "evidence_text": "Apple Inc. reported total net sales of $383.3 billion for the fiscal year ended September 30, 2023. iPhone accounted for $200.6 billion, Services for $85.2 billion.",
+        },
+        {
+            "id": "fb_002",
+            "question": "What is Microsoft's current ratio as of June 30, 2023?",
+            "answer": "1.77",
+            "company": "Microsoft",
+            "doc_name": "Microsoft_2023_10K",
+            "doc_type": "10k",
+            "question_type": "metrics-generated",
+            "evidence_doc": "Microsoft_2023_10K",
+            "evidence_text": "Microsoft Corporation had total current assets of $184.3 billion and total current liabilities of $103.9 billion as of June 30, 2023.",
+        },
+        {
+            "id": "fb_003",
+            "question": "What was NVIDIA's revenue growth rate in fiscal 2024?",
+            "answer": "126%",
+            "company": "NVIDIA",
+            "doc_name": "NVIDIA_2024_10K",
+            "doc_type": "10k",
+            "question_type": "metrics-generated",
+            "evidence_doc": "NVIDIA_2024_10K",
+            "evidence_text": "NVIDIA reported revenue of $60.9 billion for fiscal year 2024, up 126% from $26.9 billion in fiscal year 2023.",
+        },
+        {
+            "id": "fb_004",
+            "question": "What is Amazon's operating income for FY2023?",
+            "answer": "$36.9 billion",
+            "company": "Amazon",
+            "doc_name": "Amazon_2023_10K",
+            "doc_type": "10k",
+            "question_type": "metrics-generated",
+            "evidence_doc": "Amazon_2023_10K",
+            "evidence_text": "Amazon.com reported operating income of $36.9 billion for the fiscal year ended December 31, 2023, compared to $12.2 billion in 2022.",
+        },
+        {
+            "id": "fb_005",
+            "question": "What is Google's (Alphabet) total revenue for FY2023?",
+            "answer": "$307.4 billion",
+            "company": "Alphabet",
+            "doc_name": "Alphabet_2023_10K",
+            "doc_type": "10k",
+            "question_type": "metrics-generated",
+            "evidence_doc": "Alphabet_2023_10K",
+            "evidence_text": "Alphabet Inc. reported total revenues of $307.4 billion for the fiscal year ended December 31, 2023, an increase of 9% compared to 2022.",
+        },
+    ]
+    
+    examples = sample_data[:subset_size] if subset_size else sample_data
+    
+    # 构建语料库
+    corpus = []
+    seen_docs = set()
+    for ex in sample_data:
+        doc_name = ex["doc_name"]
+        if doc_name not in seen_docs:
+            corpus.append({
+                "id": doc_name,
+                "title": doc_name,
+                "text": ex["evidence_text"],
+                "metadata": {
+                    "company": ex["company"],
+                    "doc_type": ex["doc_type"]
+                }
+            })
+            seen_docs.add(doc_name)
+    
     
     print(f"加载完成: {len(examples)} 个问题, {len(corpus)} 篇文档")
     return examples, corpus
@@ -888,31 +1002,35 @@ def compute_f1(prediction: str, ground_truth: str) -> float:
     return f1
 
 
-def compute_retrieval_metrics(retrieved_docs: List[Dict], supporting_facts: List[List]) -> Dict[str, float]:
+def compute_retrieval_metrics(retrieved_docs: List[Dict], evidence_doc: str) -> Dict[str, float]:
     """
-    计算检索指标：Recall@K, Precision@K, F1@K
+    计算检索指标：Recall@K, Precision@K, F1@K, Hit@K
     
-    适用于 finance/law 等领域，这些领域对检索质量更关注
+    适用于 FinanceBench 单文档检索场景
     
     Args:
-        retrieved_docs: 检索到的文档列表
-        supporting_facts: 支持事实列表 [[title, sent_id], ...]
+        retrieved_docs: 检索到的文档列表，每个包含 'id' 字段
+        evidence_doc: 正确证据文档的名称（单个）
         
     Returns:
-        包含 recall@k, precision@k, f1@k 的字典
+        包含 recall@k, precision@k, f1@k, hit@k 的字典
     """
-    # 提取支持文档的标题
-    supporting_titles = set(fact[0] for fact in supporting_facts)
-    retrieved_titles = set(doc['id'] for doc in retrieved_docs)
+    # 检索到的文档 ID 集合
+    retrieved_ids = [doc['id'] for doc in retrieved_docs]
+    retrieved_set = set(retrieved_ids)
     
-    # 计算交集
-    hit_titles = supporting_titles & retrieved_titles
+    # 正确文档（FinanceBench 是单文档检索）
+    gold_set = {evidence_doc} if evidence_doc else set()
     
-    # Recall@K: 命中的支持文档数 / 总支持文档数
-    recall = len(hit_titles) / len(supporting_titles) if supporting_titles else 0.0
+    # 检查是否命中正确文档
+    hit = evidence_doc in retrieved_set
     
-    # Precision@K: 命中的文档数 / 检索的文档数
-    precision = len(hit_titles) / len(retrieved_titles) if retrieved_titles else 0.0
+    # Recall@K: 如果正确文档在检索结果中，则为 1，否则为 0
+    # 对于单文档检索，Recall@K 退化为 Hit@K
+    recall = 1.0 if hit else 0.0
+    
+    # Precision@K: 命中数 / 检索数（单文档场景下最多为 1/K）
+    precision = 1.0 / len(retrieved_ids) if hit and retrieved_ids else 0.0
     
     # F1@K: Recall 和 Precision 的调和平均
     if recall + precision > 0:
@@ -920,10 +1038,14 @@ def compute_retrieval_metrics(retrieved_docs: List[Dict], supporting_facts: List
     else:
         f1 = 0.0
     
+    # Hit@K: 是否命中正确文档（0 或 1）
+    hit_at_k = 1.0 if hit else 0.0
+    
     return {
         'recall@k': recall,
         'precision@k': precision,
-        'f1@k': f1
+        'f1@k': f1,
+        'hit@k': hit_at_k
     }
 
 
@@ -931,12 +1053,12 @@ def evaluate(rag_system: RAGSystem, examples: List[Dict]) -> Dict:
     """
     评估 RAG 系统
     
-    使用检索指标（Recall@K, Precision@K, F1@K）评估，
-    更适合 finance/law 等领域
+    使用检索指标（Recall@K, Precision@K, F1@K, Hit@K）评估
+    适用于 FinanceBench 单文档检索场景
     
     Args:
         rag_system: RAG 系统实例
-        examples: 测试示例列表
+        examples: 测试示例列表，每个包含 'question', 'answer', 'evidence_doc' 字段
         
     Returns:
         评估结果字典
@@ -947,6 +1069,7 @@ def evaluate(rag_system: RAGSystem, examples: List[Dict]) -> Dict:
     recall_scores = []
     precision_scores = []
     f1_at_k_scores = []
+    hit_at_k_scores = []
     
     for example in tqdm(examples, desc="评估中", ascii=False):
         result = rag_system.answer(example['question'])
@@ -955,20 +1078,22 @@ def evaluate(rag_system: RAGSystem, examples: List[Dict]) -> Dict:
         f1 = compute_f1(result['answer'], example['answer'])
         f1_scores.append(f1)
         
-        # 计算检索指标
+        # 计算检索指标（使用 evidence_doc 而非 supporting_facts）
         retrieval_metrics = compute_retrieval_metrics(
             result['retrieved_documents'], 
-            example['supporting_facts']
+            example.get('evidence_doc', '')  # FinanceBench 使用单文档
         )
         recall_scores.append(retrieval_metrics['recall@k'])
         precision_scores.append(retrieval_metrics['precision@k'])
         f1_at_k_scores.append(retrieval_metrics['f1@k'])
+        hit_at_k_scores.append(retrieval_metrics['hit@k'])
     
     return {
         "f1_score": sum(f1_scores) / len(f1_scores),
         "recall@k": sum(recall_scores) / len(recall_scores),
         "precision@k": sum(precision_scores) / len(precision_scores),
         "f1@k": sum(f1_at_k_scores) / len(f1_at_k_scores),
+        "hit@k": sum(hit_at_k_scores) / len(hit_at_k_scores),  # 新增 Hit@K
         "num_examples": len(examples),
         "retriever": rag_system.retriever.get_name(),
         "generator": rag_system.generator.get_name()
@@ -1000,7 +1125,7 @@ def main():
     args, _ = parser.parse_known_args()
     
     print("=" * 60)
-    print("RAG 系统实验")
+    print("RAG 系统实验 - FinanceBench")
     print("=" * 60)
     print(f"检索方法: {args.retriever}")
     print(f"测试样本: {args.subset}")
@@ -1014,7 +1139,7 @@ def main():
     print("=" * 60)
     
     # 1. 加载数据
-    examples, corpus = load_hotpotqa(subset_size=args.subset)
+    examples, corpus = load_financebench(subset_size=args.subset)
     
     # 确保缓存目录存在
     os.makedirs(Config.CACHE_DIR, exist_ok=True)
@@ -1024,11 +1149,11 @@ def main():
     retrievers = {}
     
     if args.retriever in ["bm25", "both"]:
-        bm25_cache = os.path.join(Config.CACHE_DIR, "bm25_index.pkl")
+        bm25_cache = os.path.join(Config.CACHE_DIR, "bm25_index_finance.pkl")
         retrievers["bm25"] = BM25Retriever(corpus, cache_path=bm25_cache)
     
     if args.retriever in ["contriever", "both"]:
-        contriever_cache = os.path.join(Config.CACHE_DIR, "contriever_embeddings.pkl")
+        contriever_cache = os.path.join(Config.CACHE_DIR, "contriever_embeddings_finance.pkl")
         retrievers["contriever"] = ContrieverRetriever(
             corpus, 
             cache_path=contriever_cache,
@@ -1065,6 +1190,7 @@ def main():
         print(f"  Recall@K:    {eval_result['recall@k']:.4f}")
         print(f"  Precision@K: {eval_result['precision@k']:.4f}")
         print(f"  F1@K:        {eval_result['f1@k']:.4f}")
+        print(f"  Hit@K:       {eval_result['hit@k']:.4f}")
     
     # 5. 保存结果
     result_file = os.path.join(
@@ -1080,10 +1206,10 @@ def main():
         print("\n" + "=" * 60)
         print("检索方法对比:")
         print("=" * 80)
-        print(f"{'检索器':<12} {'F1 Score':<12} {'Recall@K':<12} {'Precision@K':<12} {'F1@K':<12}")
+        print(f"{'检索器':<12} {'F1 Score':<12} {'Recall@K':<12} {'Precision@K':<12} {'Hit@K':<12}")
         print("-" * 80)
         for r in results:
-            print(f"{r['retriever']:<12} {r['f1_score']:<12.4f} {r['recall@k']:<12.4f} {r['precision@k']:<12.4f} {r['f1@k']:<12.4f}")
+            print(f"{r['retriever']:<12} {r['f1_score']:<12.4f} {r['recall@k']:<12.4f} {r['precision@k']:<12.4f} {r['hit@k']:<12.4f}")
 
 
 if __name__ == "__main__":
@@ -1095,7 +1221,7 @@ if __name__ == "__main__":
 # ============================================
 
 def run_comparison_experiment(
-    subset_size: int = 100,
+    subset_size: int = 50,
     top_k: int = 3,
     model: str = "qwen-plus",
     api_key: str = None,
@@ -1105,11 +1231,11 @@ def run_comparison_experiment(
     llama_model_path: str = None
 ) -> Dict:
     """
-    Colab 专用函数：运行 BM25 vs Contriever 对比实验
+    Colab 专用函数：运行 BM25 vs Contriever 对比实验 (FinanceBench)
     
     在 Colab 中直接调用：
         # 使用 Qwen (API)
-        from rag_hotpotqa import run_comparison_experiment
+        from rag_finance import run_comparison_experiment
         results = run_comparison_experiment(api_key="sk-xxx")
         
         # 使用本地 Llama 模型
@@ -1122,7 +1248,7 @@ def run_comparison_experiment(
         results = run_comparison_experiment(api_key="sk-xxx", use_retrievers=["bm25"])
     
     Args:
-        subset_size: 测试样本数量，默认 100
+        subset_size: 测试样本数量，默认 50
         top_k: 检索文档数量，默认 3
         model: Qwen 模型名称，默认 "qwen-plus" (仅当 generator_type="qwen" 时有效)
         api_key: DashScope API Key（如未提供，从环境变量读取）
@@ -1143,7 +1269,7 @@ def run_comparison_experiment(
         device = "cuda" if torch.cuda.is_available() else "cpu"
     
     print("=" * 70)
-    print("🚀 RAG 系统对比实验 - BM25 vs Contriever")
+    print("🚀 RAG 系统对比实验 - FinanceBench (BM25 vs Contriever)")
     print("=" * 70)
     print(f"测试样本: {subset_size}")
     print(f"Top-K: {top_k}")
@@ -1156,7 +1282,7 @@ def run_comparison_experiment(
     print("=" * 70)
     
     # 1. 加载数据
-    examples, corpus = load_hotpotqa(subset_size=subset_size)
+    examples, corpus = load_financebench(subset_size=subset_size)
     
     # 确保目录存在
     os.makedirs(Config.CACHE_DIR, exist_ok=True)
@@ -1177,14 +1303,14 @@ def run_comparison_experiment(
     # BM25
     if "bm25" in use_retrievers:
         print("\n[BM25] 初始化 BM25 检索器...")
-        bm25_cache = os.path.join(Config.CACHE_DIR, "bm25_index.pkl")
+        bm25_cache = os.path.join(Config.CACHE_DIR, "bm25_index_finance.pkl")
         bm25_retriever = BM25Retriever(corpus, cache_path=bm25_cache)
         retrievers.append(("BM25", bm25_retriever))
     
     # Contriever
     if "contriever" in use_retrievers:
         print("\n[Contriever] 初始化 Contriever 检索器...")
-        contriever_cache = os.path.join(Config.CACHE_DIR, "contriever_embeddings.pkl")
+        contriever_cache = os.path.join(Config.CACHE_DIR, "contriever_embeddings_finance.pkl")
         contriever_retriever = ContrieverRetriever(
             corpus, 
             cache_path=contriever_cache,
@@ -1222,13 +1348,13 @@ def run_comparison_experiment(
         print(f"   F1 Score:    {eval_result['f1_score']:.4f}")
         print(f"   Recall@K:   {eval_result['recall@k']:.4f}")
         print(f"   Precision@K: {eval_result['precision@k']:.4f}")
-        print(f"   F1@K:       {eval_result['f1@k']:.4f}")
+        print(f"   Hit@K:      {eval_result['hit@k']:.4f}")
     
     # 5. 保存结果
     from datetime import datetime
     result_file = os.path.join(
         Config.RESULTS_DIR, 
-        f"comparison_{subset_size}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        f"comparison_finance_{subset_size}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     )
     with open(result_file, 'w', encoding='utf-8') as f:
         json.dump(list(results.values()), f, ensure_ascii=False, indent=2)
@@ -1238,29 +1364,27 @@ def run_comparison_experiment(
     print("\n" + "="*70)
     print("📈 最终对比结果")
     print("="*70)
-    print(f"{'检索器':<15} {'F1 Score':<12} {'Recall@K':<12} {'Precision@K':<14} {'F1@K':<12}")
+    print(f"{'检索器':<15} {'F1 Score':<12} {'Recall@K':<12} {'Precision@K':<14} {'Hit@K':<12}")
     print("-"*70)
     for name, r in results.items():
-        print(f"{r['retriever']:<15} {r['f1_score']:<12.4f} {r['recall@k']:<12.4f} {r['precision@k']:<14.4f} {r['f1@k']:<12.4f}")
+        print(f"{r['retriever']:<15} {r['f1_score']:<12.4f} {r['recall@k']:<12.4f} {r['precision@k']:<14.4f} {r['hit@k']:<12.4f}")
     print("="*70)
     
     # 找出最佳检索器
-    best_recall = max(results.keys(), key=lambda k: results[k]['recall@k'])
-    best_f1k = max(results.keys(), key=lambda k: results[k]['f1@k'])
+    best_hit = max(results.keys(), key=lambda k: results[k]['hit@k'])
     best_f1 = max(results.keys(), key=lambda k: results[k]['f1_score'])
     
-    print(f"\n🏆 最佳 Recall@K: {best_recall} ({results[best_recall]['recall@k']:.4f})")
-    print(f"🏆 最佳 F1@K:     {best_f1k} ({results[best_f1k]['f1@k']:.4f})")
+    print(f"\n🏆 最佳 Hit@K:    {best_hit} ({results[best_hit]['hit@k']:.4f})")
     print(f"🏆 最佳 F1 Score: {best_f1} ({results[best_f1]['f1_score']:.4f})")
     
     # 计算提升幅度（只有当两个检索器都存在时才计算）
     if 'BM25' in results and 'Contriever' in results:
-        recall_improve = (results['Contriever']['recall@k'] - results['BM25']['recall@k']) / results['BM25']['recall@k'] * 100 if results['BM25']['recall@k'] > 0 else 0
-        f1k_improve = (results['Contriever']['f1@k'] - results['BM25']['f1@k']) / results['BM25']['f1@k'] * 100 if results['BM25']['f1@k'] > 0 else 0
+        hit_improve = (results['Contriever']['hit@k'] - results['BM25']['hit@k']) / results['BM25']['hit@k'] * 100 if results['BM25']['hit@k'] > 0 else 0
+        f1_improve = (results['Contriever']['f1_score'] - results['BM25']['f1_score']) / results['BM25']['f1_score'] * 100 if results['BM25']['f1_score'] > 0 else 0
         
         print(f"\n📊 Contriever vs BM25 提升:")
-        print(f"   Recall@K: {'+' if recall_improve >= 0 else ''}{recall_improve:.2f}%")
-        print(f"   F1@K:     {'+' if f1k_improve >= 0 else ''}{f1k_improve:.2f}%")
+        print(f"   Hit@K:    {'+' if hit_improve >= 0 else ''}{hit_improve:.2f}%")
+        print(f"   F1 Score: {'+' if f1_improve >= 0 else ''}{f1_improve:.2f}%")
     
     return results
 
@@ -1270,14 +1394,14 @@ def run_comparison_experiment(
 # ============================================
 
 def run_llama_experiment(
-    subset_size: int = 100,
+    subset_size: int = 50,
     top_k: int = 3,
     llama_model_path: str = "/content/models/llama-3.1-8b",
     use_retrievers: List[str] = None,
     use_8bit: bool = True
 ) -> Dict:
     """
-    Colab 专用：使用本地 Llama 模型运行 RAG 实验
+    Colab 专用：使用本地 Llama 模型运行 RAG 实验 (FinanceBench)
     
     使用方法（在 Colab 中）:
         # 1. 先下载模型（如果还没有）
@@ -1289,7 +1413,7 @@ def run_llama_experiment(
         )
         
         # 2. 运行实验
-        from rag_hotpotqa import run_llama_experiment
+        from rag_finance import run_llama_experiment
         results = run_llama_experiment(
             subset_size=10,  # 快速测试用少量数据
             llama_model_path="/content/models/llama-3.1-8b"
