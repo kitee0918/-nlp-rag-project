@@ -291,20 +291,22 @@ class ContrieverRetriever:
             try:
                 print(f"  尝试加载 ({attempt + 1}/{max_retries})...")
                 self.tokenizer = AutoTokenizer.from_pretrained(
-                    model_name, 
+                    model_name,
                     resume_download=True,
-                    force_download=False
+                    force_download=False,
+                    trust_remote_code=True
                 )
                 self.model = AutoModel.from_pretrained(
-                    model_name, 
+                    model_name,
                     resume_download=True,
-                    force_download=False
+                    force_download=False,
+                    trust_remote_code=True
                 )
                 print("  模型加载成功！")
                 break
             except Exception as e:
                 if attempt < max_retries - 1:
-                    print(f"  加载失败: {type(e).__name__}")
+                    print(f"  加载失败: {type(e).__name__}: {str(e)[:100]}")
                     wait_time = 10 + attempt * 5  # 递增等待时间
                     print(f"  等待 {wait_time} 秒后重试...")
                     time.sleep(wait_time)
