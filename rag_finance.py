@@ -320,7 +320,7 @@ class BM25Retriever:
     def __init__(self, documents: List[Dict], cache_path: Optional[str] = None):
         """
         初始化 BM25 检索器
-        
+            
         Args:
             documents: 文档列表，每个文档包含 'id', 'text' 等字段
             cache_path: 索引缓存路径
@@ -328,19 +328,31 @@ class BM25Retriever:
         self.documents = documents
         self.doc_ids = [doc['id'] for doc in documents]
         self.corpus = [doc['text'] for doc in documents]
-        
-        # 尝试加载缓存
+            
+        # 尝试加载缓存（需要验证缓存有效性）
+        cache_valid = False
         if cache_path and os.path.exists(cache_path):
-            print(f"从缓存加载 BM25 索引: {cache_path}")
-            with open(cache_path, 'rb') as f:
-                data = pickle.load(f)
-                self.bm25 = data['bm25']
-        else:
+            try:
+                print(f"从缓存加载 BM25 索引: {cache_path}")
+                with open(cache_path, 'rb') as f:
+                    data = pickle.load(f)
+                    self.bm25 = data['bm25']
+                # 验证缓存：检查文档数量是否匹配
+                cached_corpus_size = len(self.bm25.doc_len) if hasattr(self.bm25, 'doc_len') else 0
+                if cached_corpus_size == len(self.corpus):
+                    print(f"缓存验证通过: {cached_corpus_size} 个文档")
+                    cache_valid = True
+                else:
+                    print(f"缓存失效: 缓存有 {cached_corpus_size} 个文档, 当前有 {len(self.corpus)} 个文档，重新构建...")
+            except Exception as e:
+                print(f"缓存加载失败: {e}，重新构建...")
+            
+        if not cache_valid:
             print("构建 BM25 索引...")
             # 简单分词
             self.tokenized_corpus = [doc.lower().split() for doc in tqdm(self.corpus, ascii=False)]
             self.bm25 = BM25Okapi(self.tokenized_corpus)
-            
+                
             # 保存缓存
             if cache_path:
                 os.makedirs(os.path.dirname(cache_path), exist_ok=True)
