@@ -709,27 +709,53 @@ Please provide a concise and accurate answer:"""
                 return_tensors="pt"
             )
             
+            # 处理 apply_chat_template 返回值（可能是 tensor 或 dict）
+            if isinstance(input_ids, dict):
+                # 某些 tokenizer 返回 dict（包含 input_ids 和 attention_mask）
+                input_tensor = input_ids['input_ids']
+                attention_mask = input_ids.get('attention_mask', None)
+            elif isinstance(input_ids, torch.Tensor):
+                input_tensor = input_ids
+                attention_mask = None
+            else:
+                raise TypeError(f"apply_chat_template 返回了意外类型: {type(input_ids)}")
+            
             # 获取模型设备（device_map="auto" 时 model.device 可能不存在）
             try:
                 device = self.model.device
             except AttributeError:
                 device = next(self.model.parameters()).device
-            input_ids = input_ids.to(device)
+            
+            # 移动到正确设备
+            input_tensor = input_tensor.to(device)
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(device)
             
             # 生成
             with torch.no_grad():
-                outputs = self.model.generate(
-                    input_ids,
-                    max_new_tokens=256,
-                    do_sample=True,
-                    temperature=0.7,
-                    top_p=0.9,
-                    pad_token_id=self.tokenizer.eos_token_id
-                )
+                if attention_mask is not None:
+                    outputs = self.model.generate(
+                        input_tensor,
+                        attention_mask=attention_mask,
+                        max_new_tokens=256,
+                        do_sample=True,
+                        temperature=0.7,
+                        top_p=0.9,
+                        pad_token_id=self.tokenizer.eos_token_id
+                    )
+                else:
+                    outputs = self.model.generate(
+                        input_tensor,
+                        max_new_tokens=256,
+                        do_sample=True,
+                        temperature=0.7,
+                        top_p=0.9,
+                        pad_token_id=self.tokenizer.eos_token_id
+                    )
             
             # 解码
             generated_text = self.tokenizer.decode(
-                outputs[0][input_ids.shape[-1]:], 
+                outputs[0][input_tensor.shape[-1]:], 
                 skip_special_tokens=True
             )
             
@@ -742,7 +768,21 @@ Please provide a concise and accurate answer:"""
         except Exception as e:
             error_msg = str(e)
             error_type = type(e).__name__
-            print(f"\n生成错误 [{error_type}]: {error_msg}")
+            
+            # 详细错误信息（AttributeError 通常包含属性名）
+            if error_type == "AttributeError":
+                # 尝试获取更多细节
+                import traceback
+                tb_str = traceback.format_exc()
+                print(f"\n生成错误 [AttributeError]:")
+                print(f"   错误详情: {error_msg if error_msg else '(空)'}")
+                # 打印堆栈最后几行
+                for line in tb_str.split('\n')[-5:]:
+                    if line.strip():
+                        print(f"   {line}")
+            else:
+                print(f"\n生成错误 [{error_type}]: {error_msg}")
+            
             return {
                 "answer": "",
                 "prompt": prompt,
