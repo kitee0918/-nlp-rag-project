@@ -1343,3 +1343,474 @@ def run_llama_experiment(
         llama_model_path=llama_model_path,
         use_retrievers=use_retrievers
     )
+
+
+# ============================================
+# 交互式 RAG 会话（缓存模型和数据）
+# ============================================
+
+class InteractiveRAGSession:
+    """
+    交互式 RAG 实验会话 - 缓存加载的资源
+    
+    在一次会话中：
+    - 数据集只加载一次
+    - 检索器索引只构建一次
+    - 模型只加载一次
+    
+    使用方法:
+        session = InteractiveRAGSession()
+        session.start()  # 启动交互式命令行
+        
+    或在 Colab/Jupyter 中:
+        session = InteractiveRAGSession()
+        session.load_data(100)
+        session.load_generator("llama", "/content/models/llama-3.1-8b")
+        session.run_experiment(["bm25", "contriever"], top_k=3)
+    """
+    
+    def __init__(self):
+        # 缓存的数据
+        self.examples = None
+        self.corpus = None
+        self.subset_size = None
+        
+        # 缓存的检索器
+        self.retrievers = {}
+        
+        # 当前生成器
+        self.generator = None
+        self.generator_type = None
+        self.generator_config = {}
+        
+        # 当前设备
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        
+        # 默认配置
+        self.default_top_k = 3
+        
+        print("🎮 交互式 RAG 会话已初始化")
+        print(f"   设备: {self.device}")
+    
+    def load_data(self, subset_size: int = None, force_reload: bool = False) -> Tuple[List[Dict], List[Dict]]:
+        """
+        加载数据集（只加载一次，后续调用直接返回缓存）
+        
+        Args:
+            subset_size: 样本数量
+            force_reload: 是否强制重新加载
+            
+        Returns:
+            (examples, corpus) 元组
+        """
+        # 检查是否需要加载
+        if not force_reload and self.examples is not None:
+            if subset_size is None or subset_size == self.subset_size:
+                print(f"✅ 使用缓存数据: {len(self.examples)} 个问题, {len(self.corpus)} 篇文档")
+                return self.examples, self.corpus
+        
+        # 加载数据
+        actual_size = subset_size or Config.SUBSET_SIZE
+        print(f"\n📂 加载 HotpotQA 数据集 (subset_size={actual_size})...")
+        
+        self.examples, self.corpus = load_hotpotqa(subset_size=actual_size)
+        self.subset_size = actual_size
+        
+        # 清除检索器缓存（数据变了）
+        self.retrievers = {}
+        
+        return self.examples, self.corpus
+    
+    def load_retriever(self, name: str) -> object:
+        """
+        加载检索器（缓存）
+        
+        Args:
+            name: 检索器名称 "bm25" 或 "contriever"
+            
+        Returns:
+            检索器实例
+        """
+        name = name.lower()
+        
+        # 检查缓存
+        if name in self.retrievers:
+            print(f"✅ 使用缓存检索器: {name.upper()}")
+            return self.retrievers[name]
+        
+        # 确保数据已加载
+        if self.corpus is None:
+            print("⚠️  数据未加载，正在加载...")
+            self.load_data()
+        
+        # 创建检索器
+        os.makedirs(Config.CACHE_DIR, exist_ok=True)
+        
+        if name == "bm25":
+            print(f"\n📦 初始化 BM25 检索器...")
+            cache_path = os.path.join(Config.CACHE_DIR, "bm25_index.pkl")
+            retriever = BM25Retriever(self.corpus, cache_path=cache_path)
+        elif name == "contriever":
+            print(f"\n📦 初始化 Contriever 检索器...")
+            cache_path = os.path.join(Config.CACHE_DIR, "contriever_embeddings.pkl")
+            retriever = ContrieverRetriever(
+                self.corpus,
+                cache_path=cache_path,
+                device=self.device
+            )
+        else:
+            raise ValueError(f"未知检索器: {name}. 可选: bm25, contriever")
+        
+        # 缓存
+        self.retrievers[name] = retriever
+        print(f"✅ 检索器 {name.upper()} 已缓存")
+        return retriever
+    
+    def load_generator(
+        self, 
+        generator_type: str, 
+        model_path: str = None,
+        model_name: str = "qwen-plus",
+        api_key: str = None,
+        force_reload: bool = False
+    ) -> object:
+        """
+        加载生成器（缓存）
+        
+        Args:
+            generator_type: "qwen" 或 "llama"
+            model_path: Llama 模型路径（仅 llama）
+            model_name: Qwen 模型名称（仅 qwen）
+            api_key: DashScope API Key（仅 qwen）
+            force_reload: 是否强制重新加载
+            
+        Returns:
+            生成器实例
+        """
+        generator_type = generator_type.lower()
+        
+        # 检查是否需要重新加载
+        if not force_reload and self.generator is not None:
+            if self.generator_type == generator_type:
+                # 检查配置是否匹配
+                config_match = (
+                    (generator_type == "llama" and self.generator_config.get("model_path") == model_path) or
+                    (generator_type == "qwen" and self.generator_config.get("model_name") == model_name)
+                )
+                if config_match:
+                    print(f"✅ 使用缓存生成器: {self.generator.get_name()}")
+                    return self.generator
+        
+        # 创建生成器
+        if generator_type == "llama":
+            print(f"\n🤖 加载 Llama 生成器...")
+            print(f"   模型路径: {model_path or Config.LLAMA_MODEL_PATH}")
+            self.generator = LlamaGenerator(
+                model_path=model_path,
+                device=self.device
+            )
+            self.generator_config = {"model_path": model_path}
+        elif generator_type == "qwen":
+            print(f"\n🤖 加载 Qwen 生成器...")
+            print(f"   模型: {model_name}")
+            self.generator = QwenGenerator(
+                model=model_name,
+                api_key=api_key
+            )
+            self.generator_config = {"model_name": model_name}
+        else:
+            raise ValueError(f"未知生成器类型: {generator_type}. 可选: qwen, llama")
+        
+        self.generator_type = generator_type
+        print(f"✅ 生成器已缓存: {self.generator.get_name()}")
+        return self.generator
+    
+    def run_experiment(
+        self,
+        retrievers: List[str] = None,
+        top_k: int = None,
+        subset_size: int = None
+    ) -> Dict:
+        """
+        运行 RAG 实验（使用缓存的资源）
+        
+        Args:
+            retrievers: 检索器列表，默认 ["bm25", "contriever"]
+            top_k: 检索文档数，默认 3
+            subset_size: 样本数（如果与缓存不同会重新加载）
+            
+        Returns:
+            实验结果字典
+        """
+        # 设置默认值
+        if retrievers is None:
+            retrievers = ["bm25", "contriever"]
+        if top_k is None:
+            top_k = self.default_top_k
+        
+        # 加载数据（如果需要）
+        if subset_size is not None and subset_size != self.subset_size:
+            print(f"\n⚠️  请求的样本数 ({subset_size}) 与缓存 ({self.subset_size}) 不同，重新加载...")
+            self.load_data(subset_size, force_reload=True)
+        elif self.examples is None:
+            self.load_data(subset_size)
+        
+        # 检查生成器
+        if self.generator is None:
+            raise RuntimeError("请先加载生成器！使用 load_generator('llama') 或 load_generator('qwen')")
+        
+        # 加载检索器
+        for r in retrievers:
+            self.load_retriever(r)
+        
+        # 运行实验
+        print(f"\n{'='*70}")
+        print(f"🚀 运行实验: {len(self.examples)} 样本, top_k={top_k}")
+        print(f"   检索器: {retrievers}")
+        print(f"   生成器: {self.generator.get_name()}")
+        print(f"{'='*70}")
+        
+        results = {}
+        for r_name in retrievers:
+            retriever = self.retrievers[r_name.lower()]
+            rag = RAGSystem(retriever, self.generator, top_k=top_k)
+            eval_result = evaluate(rag, self.examples)
+            results[r_name.upper()] = eval_result
+            
+            print(f"\n📊 {r_name.upper()} 结果:")
+            print(f"   F1 Score:    {eval_result['f1_score']:.4f}")
+            print(f"   Recall@K:   {eval_result['recall@k']:.4f}")
+            print(f"   Precision@K: {eval_result['precision@k']:.4f}")
+            print(f"   F1@K:       {eval_result['f1@k']:.4f}")
+        
+        return results
+    
+    def status(self) -> str:
+        """显示当前会话状态"""
+        lines = [
+            "\n" + "="*60,
+            "📋 会话状态",
+            "="*60,
+            f"设备: {self.device}",
+            f"数据: {'已加载 (%d 问题, %d 文档)' % (len(self.examples), len(self.corpus)) if self.examples else '未加载'}",
+            f"当前样本数: {self.subset_size or '未设置'}",
+            "",
+            "已缓存检索器:",
+        ]
+        
+        if self.retrievers:
+            for name in self.retrievers:
+                lines.append(f"  ✅ {name.upper()}")
+        else:
+            lines.append("  (无)")
+        
+        lines.extend([
+            "",
+            f"当前生成器: {self.generator.get_name() if self.generator else '(未设置)'}",
+            "="*60
+        ])
+        
+        return "\n".join(lines)
+    
+    def clear_cache(self):
+        """清除缓存"""
+        self.examples = None
+        self.corpus = None
+        self.subset_size = None
+        self.retrievers = {}
+        self.generator = None
+        self.generator_type = None
+        self.generator_config = {}
+        
+        # 清理 GPU 显存
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        
+        print("🗑️  所有缓存已清除")
+    
+    def start(self):
+        """
+        启动交互式命令行界面
+        
+        支持的命令:
+        - help / ?         显示帮助
+        - status           显示会话状态
+        - load <n>         加载数据集（n=样本数）
+        - gen <type> [args] 设置生成器
+        - retriever <name>  加载检索器
+        - run [args]       运行实验
+        - clear            清除缓存
+        - quit / exit      退出
+        """
+        print("\n" + "="*60)
+        print("🎮 RAG 交互式实验环境")
+        print("="*60)
+        print("输入 'help' 或 '?' 查看命令列表")
+        print("="*60)
+        
+        while True:
+            try:
+                cmd = input("\nRAG> ").strip()
+                
+                if not cmd:
+                    continue
+                
+                parts = cmd.split()
+                action = parts[0].lower()
+                args = parts[1:]
+                
+                # 退出
+                if action in ["quit", "exit", "q"]:
+                    print("👋 退出交互式会话...")
+                    self.clear_cache()
+                    break
+                
+                # 帮助
+                elif action in ["help", "?", "h"]:
+                    self._print_help()
+                
+                # 状态
+                elif action == "status":
+                    print(self.status())
+                
+                # 加载数据
+                elif action == "load":
+                    n = int(args[0]) if args else Config.SUBSET_SIZE
+                    self.load_data(n)
+                
+                # 设置生成器
+                elif action in ["gen", "generator"]:
+                    if not args:
+                        print("用法: gen <llama|qwen> [model_path|model_name]")
+                        print("  gen llama /content/models/llama-3.1-8b")
+                        print("  gen qwen qwen-plus")
+                        continue
+                    gen_type = args[0].lower()
+                    if gen_type == "llama":
+                        model_path = args[1] if len(args) > 1 else Config.LLAMA_MODEL_PATH
+                        self.load_generator("llama", model_path=model_path)
+                    elif gen_type == "qwen":
+                        model_name = args[1] if len(args) > 1 else "qwen-plus"
+                        self.load_generator("qwen", model_name=model_name)
+                    else:
+                        print(f"未知生成器类型: {gen_type}")
+                
+                # 加载检索器
+                elif action in ["retriever", "ret"]:
+                    if not args:
+                        print("用法: retriever <bm25|contriever|all>")
+                        continue
+                    if args[0].lower() == "all":
+                        self.load_retriever("bm25")
+                        self.load_retriever("contriever")
+                    else:
+                        self.load_retriever(args[0])
+                
+                # 运行实验
+                elif action == "run":
+                    # 解析参数
+                    retrievers = ["bm25", "contriever"]
+                    top_k = self.default_top_k
+                    subset_size = None
+                    
+                    i = 0
+                    while i < len(args):
+                        if args[i] == "-k" and i + 1 < len(args):
+                            top_k = int(args[i + 1])
+                            i += 2
+                        elif args[i] == "-n" and i + 1 < len(args):
+                            subset_size = int(args[i + 1])
+                            i += 2
+                        elif args[i] in ["bm25", "contriever"]:
+                            retrievers = [args[i]]
+                            i += 1
+                        else:
+                            i += 1
+                    
+                    self.run_experiment(retrievers, top_k, subset_size)
+                
+                # 快速测试
+                elif action == "quick":
+                    # 快速运行 Llama+BM25
+                    if self.generator is None:
+                        self.load_generator("llama")
+                    self.run_experiment(["bm25"], top_k=3, subset_size=10)
+                
+                # 清除缓存
+                elif action == "clear":
+                    self.clear_cache()
+                
+                # 未知命令
+                else:
+                    print(f"未知命令: {action}")
+                    print("输入 'help' 查看可用命令")
+                    
+            except KeyboardInterrupt:
+                print("\n\n👋 检测到 Ctrl+C，退出...")
+                self.clear_cache()
+                break
+            except Exception as e:
+                print(f"\n❌ 错误: {type(e).__name__}: {e}")
+                # 打印简短堆栈
+                import traceback
+                tb_lines = traceback.format_exc().split('\n')
+                for line in tb_lines[-3:]:
+                    if line.strip():
+                        print(f"   {line}")
+    
+    def _print_help(self):
+        """打印帮助信息"""
+        help_text = """
+📚 命令帮助
+===============================================================================
+
+数据管理:
+  load <n>          加载数据集，n 为样本数（默认 100）
+                    例: load 10
+
+生成器设置:
+  gen llama [path]  使用本地 Llama 模型
+                    例: gen llama /content/models/llama-3.1-8b
+  gen qwen [name]   使用 Qwen API
+                    例: gen qwen qwen-plus
+
+检索器管理:
+  ret bm25          加载 BM25 检索器
+  ret contriever    加载 Contriever 检索器
+  ret all           加载所有检索器
+
+运行实验:
+  run               运行完整实验（BM25 + Contriever）
+  run bm25          只运行 BM25
+  run contriever    只运行 Contriever
+  run -k 5          指定 top_k=5
+  run -n 50         指定样本数=50
+  quick             快速测试（Llama + BM25, 10 样本）
+
+其他命令:
+  status            显示当前会话状态
+  clear             清除所有缓存
+  help / ?          显示此帮助
+  quit / exit       退出交互式会话
+
+===============================================================================
+💡 提示: 资源会在首次加载后缓存，后续调用直接使用缓存
+"""
+        print(help_text)
+
+
+def start_interactive():
+    """启动交互式 RAG 会话（便捷入口）"""
+    session = InteractiveRAGSession()
+    session.start()
+
+
+# 命令行入口支持 --interactive 模式
+if __name__ == "__main__":
+    import sys
+    
+    # 检查是否是交互模式
+    if "--interactive" in sys.argv or "-i" in sys.argv:
+        start_interactive()
+    else:
+        main()
