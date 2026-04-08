@@ -118,8 +118,7 @@ def download_model_python(repo_id: str, filename: str = None, local_dir: str = N
 # ============================================================
 
 # 模型仓库ID (从 HuggingFace 模型页面获取)
-# 例如: "meta-llama/Llama-2-7b-hf", "mistralai/Mistral-7B-v0.1"
-MODEL_REPO_ID = "meta-llama/Llama-2-7b-hf"
+MODEL_REPO_ID = "meta-llama/Meta-Llama-3.1-8B-Instruct"
 
 # 要下载的特定文件 (可选，留空则下载整个仓库)
 # 例如: "config.json", "pytorch_model.bin", "tokenizer.json"
@@ -128,8 +127,8 @@ SPECIFIC_FILE = None  # 例如: "config.json"
 # 本地保存目录 (可选，留空则使用默认缓存目录)
 LOCAL_DIR = None  # 例如: "./models/llama-2-7b"
 
-# HuggingFace Token (可选，也可以通过环境变量 HF_TOKEN 设置)
-HF_TOKEN = None  # 或 os.environ.get("HF_TOKEN")
+# HuggingFace Token
+HF_TOKEN = "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"
 
 # ============================================================
 
@@ -143,10 +142,8 @@ def main():
     if not check_huggingface_hub():
         install_huggingface_hub()
     
-    # 步骤2: 登录 (如果需要私有模型或有限制的模型)
-    # 对于需要授权的模型(如Llama)，需要先登录
-    # 取消下面这行的注释来登录:
-    # login_huggingface(HF_TOKEN)
+    # 步骤2: 登录 (Llama 等受限模型需要授权)
+    login_huggingface(HF_TOKEN)
     
     # 步骤3: 下载模型
     print(f"\n准备下载模型: {MODEL_REPO_ID}")
