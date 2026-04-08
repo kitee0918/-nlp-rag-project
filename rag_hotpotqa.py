@@ -709,14 +709,16 @@ Please provide a concise and accurate answer:"""
                 return_tensors="pt"
             )
             
-            # 处理 apply_chat_template 返回值（可能是 tensor 或 dict）
-            if isinstance(input_ids, dict):
-                # 某些 tokenizer 返回 dict（包含 input_ids 和 attention_mask）
-                input_tensor = input_ids['input_ids']
-                attention_mask = input_ids.get('attention_mask', None)
-            elif isinstance(input_ids, torch.Tensor):
+            # 处理 apply_chat_template 返回值（可能是 tensor、dict 或 BatchEncoding）
+            # BatchEncoding 是 transformers 特殊类，类似字典但 isinstance(x, dict) 为 False
+            if isinstance(input_ids, torch.Tensor):
+                # 直接返回 tensor
                 input_tensor = input_ids
                 attention_mask = None
+            elif isinstance(input_ids, dict) or hasattr(input_ids, 'input_ids'):
+                # dict 或 BatchEncoding（包含 input_ids 和 attention_mask）
+                input_tensor = input_ids['input_ids']
+                attention_mask = input_ids.get('attention_mask', None)
             else:
                 raise TypeError(f"apply_chat_template 返回了意外类型: {type(input_ids)}")
             
