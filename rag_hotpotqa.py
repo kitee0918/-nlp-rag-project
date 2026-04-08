@@ -713,7 +713,14 @@ Please provide a concise and accurate answer:"""
                 messages, 
                 add_generation_prompt=True,
                 return_tensors="pt"
-            ).to(self.model.device)
+            )
+            
+            # 获取模型设备（device_map="auto" 时 model.device 可能不存在）
+            try:
+                device = self.model.device
+            except AttributeError:
+                device = next(self.model.parameters()).device
+            input_ids = input_ids.to(device)
             
             # 生成
             with torch.no_grad():
