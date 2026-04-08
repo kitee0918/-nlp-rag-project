@@ -978,12 +978,13 @@ def run_comparison_experiment(
     print(f"🏆 最佳 F1@K:     {best_f1k} ({results[best_f1k]['f1@k']:.4f})")
     print(f"🏆 最佳 F1 Score: {best_f1} ({results[best_f1]['f1_score']:.4f})")
     
-    # 计算提升幅度
-    recall_improve = (results['Contriever']['recall@k'] - results['BM25']['recall@k']) / results['BM25']['recall@k'] * 100 if results['BM25']['recall@k'] > 0 else 0
-    f1k_improve = (results['Contriever']['f1@k'] - results['BM25']['f1@k']) / results['BM25']['f1@k'] * 100 if results['BM25']['f1@k'] > 0 else 0
-    
-    print(f"\n📊 Contriever vs BM25 提升:")
-    print(f"   Recall@K: {'+' if recall_improve >= 0 else ''}{recall_improve:.2f}%")
-    print(f"   F1@K:     {'+' if f1k_improve >= 0 else ''}{f1k_improve:.2f}%")
+    # 计算提升幅度（只有当两个检索器都存在时才计算）
+    if 'BM25' in results and 'Contriever' in results:
+        recall_improve = (results['Contriever']['recall@k'] - results['BM25']['recall@k']) / results['BM25']['recall@k'] * 100 if results['BM25']['recall@k'] > 0 else 0
+        f1k_improve = (results['Contriever']['f1@k'] - results['BM25']['f1@k']) / results['BM25']['f1@k'] * 100 if results['BM25']['f1@k'] > 0 else 0
+        
+        print(f"\n📊 Contriever vs BM25 提升:")
+        print(f"   Recall@K: {'+' if recall_improve >= 0 else ''}{recall_improve:.2f}%")
+        print(f"   F1@K:     {'+' if f1k_improve >= 0 else ''}{f1k_improve:.2f}%")
     
     return results
