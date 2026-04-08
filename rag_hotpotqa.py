@@ -643,7 +643,7 @@ class LlamaGenerator:
         # 加载模型
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_path,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             device_map="auto" if self.device == "cuda" else None,
             quantization_config=quantization_config,
             trust_remote_code=True
@@ -659,7 +659,7 @@ class LlamaGenerator:
             "text-generation",
             model=self.model,
             tokenizer=self.tokenizer,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             device_map="auto" if self.device == "cuda" else None
         )
         
@@ -1268,6 +1268,36 @@ def run_comparison_experiment(
 # ============================================
 # Colab 专用：一键运行 Llama 实验
 # ============================================
+
+def run_llama_bm25_quick(
+    subset_size: int = 10,
+    top_k: int = 3,
+    llama_model_path: str = "/content/models/llama-3.1-8b"
+) -> Dict:
+    """
+    Colab 快速测试：只运行 Llama + BM25（跳过 Qwen 和 Contriever）
+    
+    使用方法（在 Colab 中）:
+        # 复制整个代码块到 Colab 单元格直接运行
+        exec(open('rag_hotpotqa.py').read())
+        results = run_llama_bm25_quick(subset_size=10)
+    
+    Args:
+        subset_size: 测试样本数量
+        top_k: 检索文档数量
+        llama_model_path: Llama 模型路径
+        
+    Returns:
+        实验结果字典
+    """
+    return run_comparison_experiment(
+        subset_size=subset_size,
+        top_k=top_k,
+        generator_type="llama",
+        llama_model_path=llama_model_path,
+        use_retrievers=["bm25"]  # 只用 BM25
+    )
+
 
 def run_llama_experiment(
     subset_size: int = 100,
