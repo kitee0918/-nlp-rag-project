@@ -39,7 +39,7 @@ class AnalysisConfig:
     TOP_K_LIST = [1, 3, 5]
     
     # 检索器列表
-    RETRIEVERS = ["bm25"]  # 调试时先用 BM25，后续可加 "contriever"
+    RETRIEVERS = ["bm25", "contriever"]  # BM25 和 Contriever 对比
     
     # 生成模型
     MODEL = "qwen-plus"
