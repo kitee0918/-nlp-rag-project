@@ -290,18 +290,10 @@ class ContrieverRetriever:
         for attempt in range(max_retries):
             try:
                 print(f"  尝试加载 ({attempt + 1}/{max_retries})...")
-                self.tokenizer = AutoTokenizer.from_pretrained(
-                    model_name,
-                    resume_download=True,
-                    force_download=False,
-                    trust_remote_code=True
-                )
-                self.model = AutoModel.from_pretrained(
-                    model_name,
-                    resume_download=True,
-                    force_download=False,
-                    trust_remote_code=True
-                )
+                # 注意: resume_download 和 force_download 在新版 transformers 已废弃
+                # 使用最简单的加载方式
+                self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+                self.model = AutoModel.from_pretrained(model_name)
                 print("  模型加载成功！")
                 break
             except Exception as e:
