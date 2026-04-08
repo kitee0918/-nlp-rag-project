@@ -1,17 +1,29 @@
 """
-HuggingFace CLI 模型下载脚本
+HuggingFace CLI 模型下载脚本 (Colab 兼容版)
 参考文档: https://huggingface.co/docs/huggingface_hub/en/guides/cli
 
-使用方法:
-1. 首先安装 huggingface_hub: pip install -U huggingface_hub
-2. 登录 HuggingFace: hf auth login 或设置 HF_TOKEN 环境变量
-3. 运行此脚本下载模型
+Colab 使用方法:
+1. 上传此脚本到 Colab 或直接复制代码
+2. 运行第一个单元格安装依赖
+3. 运行下载代码
 """
 
 import os
 import subprocess
 import sys
 from pathlib import Path
+
+# ============================================================
+# Colab 环境检测与配置
+# ============================================================
+
+IN_COLAB = False
+try:
+    import google.colab
+    IN_COLAB = True
+    print("✓ 检测到 Colab 环境")
+except ImportError:
+    print("✓ 本地环境运行")
 
 
 def check_huggingface_hub():
@@ -124,19 +136,37 @@ MODEL_REPO_ID = "meta-llama/Meta-Llama-3.1-8B-Instruct"
 # 例如: "config.json", "pytorch_model.bin", "tokenizer.json"
 SPECIFIC_FILE = None  # 例如: "config.json"
 
-# 本地保存目录 (可选，留空则使用默认缓存目录)
-LOCAL_DIR = None  # 例如: "./models/llama-2-7b"
+# 本地保存目录
+# Colab 建议保存到 /content 或 Google Drive
+if IN_COLAB:
+    LOCAL_DIR = "/content/models/llama-3.1-8b"  # Colab 临时存储
+    # LOCAL_DIR = "/content/drive/MyDrive/models/llama-3.1-8b"  # Google Drive (需先挂载)
+else:
+    LOCAL_DIR = None  # 本地使用默认缓存目录
 
 # HuggingFace Token
+# 方式1: 直接设置 (不推荐在生产环境使用)
 HF_TOKEN = "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"
+
+# 方式2: Colab Secrets (推荐) - 取消下面的注释使用
+# from google.colab import userdata
+# HF_TOKEN = userdata.get('HF_TOKEN')
+
+# 方式3: 环境变量
+# HF_TOKEN = os.environ.get("HF_TOKEN")
 
 # ============================================================
 
 
 def main():
     print("=" * 60)
-    print("HuggingFace 模型下载工具")
+    print("HuggingFace 模型下载工具 (Colab 兼容版)")
     print("=" * 60)
+    
+    # Colab 特定设置
+    if IN_COLAB:
+        print("\n[Colab] 安装依赖...")
+        subprocess.run([sys.executable, "-m", "pip", "install", "-U", "huggingface_hub", "-q"])
     
     # 步骤1: 检查并安装依赖
     if not check_huggingface_hub():
@@ -145,12 +175,15 @@ def main():
     # 步骤2: 登录 (Llama 等受限模型需要授权)
     login_huggingface(HF_TOKEN)
     
-    # 步骤3: 下载模型
+    # 步骤3: 创建保存目录
+    if LOCAL_DIR:
+        Path(LOCAL_DIR).mkdir(parents=True, exist_ok=True)
+        print(f"保存目录: {LOCAL_DIR}")
+    
+    # 步骤4: 下载模型
     print(f"\n准备下载模型: {MODEL_REPO_ID}")
     if SPECIFIC_FILE:
         print(f"目标文件: {SPECIFIC_FILE}")
-    if LOCAL_DIR:
-        print(f"保存目录: {LOCAL_DIR}")
     
     # 使用 Python API 下载 (推荐)
     download_model_python(
@@ -160,12 +193,9 @@ def main():
         token=HF_TOKEN
     )
     
-    # 或者使用 CLI 命令下载:
-    # download_model_cli(
-    #     repo_id=MODEL_REPO_ID,
-    #     filename=SPECIFIC_FILE,
-    #     local_dir=LOCAL_DIR
-    # )
+    print("\n" + "=" * 60)
+    print("下载完成！")
+    print("=" * 60)
 
 
 if __name__ == "__main__":
