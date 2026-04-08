@@ -1,0 +1,973 @@
+{
+  "bm25": [
+    {
+      "top_k": 1,
+      "summary": {
+        "avg_recall": 0.25,
+        "avg_precision": 0.5,
+        "avg_f1k": 0.3333333333333333,
+        "avg_answer_f1": 0.20400000000000001
+      },
+      "correlations": {
+        "recall_vs_answer_f1": 0.5123364584770752,
+        "precision_vs_answer_f1": 0.5123364584770752,
+        "f1k_vs_answer_f1": 0.5123364584770752
+      },
+      "group_stats": {
+        "low (0-0.3)": {
+          "count": 5,
+          "avg_answer_f1": 0.0,
+          "std_answer_f1": 0.0
+        },
+        "medium (0.3-0.6)": {
+          "count": 5,
+          "avg_answer_f1": 0.40800000000000003,
+          "std_answer_f1": 0.4835866003106372
+        },
+        "high (0.6-1.0)": {
+          "count": 0,
+          "avg_answer_f1": 0.0,
+          "std_answer_f1": 0.0
+        }
+      },
+      "detailed_results": [
+        {
+          "question_id": "5a8b57f25542995d1e6f1371",
+          "question": "Were Scott Derrickson and Ed Wood of the same nationality?",
+          "ground_truth": "yes",
+          "predicted_answer": "根据提供的文档，我无法回答这个问题。",
+          "answer_f1": 0.0,
+          "recall@k": 0.0,
+          "precision@k": 0.0,
+          "f1@k": 0.0,
+          "top_k": 1,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "Woodson, Arkansas",
+              "title": "Woodson, Arkansas",
+              "score": 33.52901474109399
+            }
+          ]
+        },
+        {
+          "question_id": "5a8c7595554299585d9e36b6",
+          "question": "What government position was held by the woman who portrayed Corliss Archer in the film Kiss and Tell?",
+          "ground_truth": "Chief of Protocol",
+          "predicted_answer": "根据提供的文档，我无法回答这个问题。",
+          "answer_f1": 0.0,
+          "recall@k": 0.0,
+          "precision@k": 0.0,
+          "f1@k": 0.0,
+          "top_k": 1,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "A Kiss for Corliss",
+              "title": "A Kiss for Corliss",
+              "score": 49.14679072845003
+            }
+          ]
+        },
+        {
+          "question_id": "5a85ea095542994775f606a8",
+          "question": "What science fantasy young adult series, told in first person, has a set of companion books narrating the stories of enslaved worlds and alien species?",
+          "ground_truth": "Animorphs",
+          "predicted_answer": "Animorphs",
+          "answer_f1": 1.0,
+          "recall@k": 0.5,
+          "precision@k": 1.0,
+          "f1@k": 0.6666666666666666,
+          "top_k": 1,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "Animorphs",
+              "title": "Animorphs",
+              "score": 75.99526624342137
+            }
+          ]
+        },
+        {
+          "question_id": "5adbf0a255429947ff17385a",
+          "question": "Are the Laleli Mosque and Esma Sultan Mansion located in the same neighborhood?",
+          "ground_truth": "no",
+          "predicted_answer": "No. The Esma Sultan Mansion is located in the Ortaköy neighborhood, while the Laleli Mosque is not mentioned in the document, so its location cannot be confirmed—but since only Ortaköy is specified for the mansion, and no shared neighborhood is stated, they are not confirmed to be in the same neighborhood. Based solely on the given document, the answer is **no**, as the Laleli Mosque’s neighborhood is not provided, and the mansion is explicitly in Ortaköy.",
+          "answer_f1": 0.039999999999999994,
+          "recall@k": 0.5,
+          "precision@k": 1.0,
+          "f1@k": 0.6666666666666666,
+          "top_k": 1,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "Esma Sultan Mansion",
+              "title": "Esma Sultan Mansion",
+              "score": 54.50331864999655
+            }
+          ]
+        },
+        {
+          "question_id": "5a8e3ea95542995a26add48d",
+          "question": "The director of the romantic comedy \"Big Stone Gap\" is based in what New York city?",
+          "ground_truth": "Greenwich Village, New York City",
+          "predicted_answer": "根据提供的文档，我无法回答这个问题。",
+          "answer_f1": 0.0,
+          "recall@k": 0.5,
+          "precision@k": 1.0,
+          "f1@k": 0.6666666666666666,
+          "top_k": 1,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "Big Stone Gap (film)",
+              "title": "Big Stone Gap (film)",
+              "score": 41.06496745843621
+            }
+          ]
+        },
+        {
+          "question_id": "5abd94525542992ac4f382d2",
+          "question": "2014 S/S is the debut album of a South Korean boy group that was formed by who?",
+          "ground_truth": "YG Entertainment",
+          "predicted_answer": "YG Entertainment",
+          "answer_f1": 1.0,
+          "recall@k": 0.5,
+          "precision@k": 1.0,
+          "f1@k": 0.6666666666666666,
+          "top_k": 1,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "2014 S/S",
+              "title": "2014 S/S",
+              "score": 62.42886102626306
+            }
+          ]
+        },
+        {
+          "question_id": "5a85b2d95542997b5ce40028",
+          "question": "Who was known by his stage name Aladin and helped organizations improve their performance as a consultant?",
+          "ground_truth": "Eenasul Fateh",
+          "predicted_answer": "根据提供的文档，我无法回答这个问题。",
+          "answer_f1": 0.0,
+          "recall@k": 0.0,
+          "precision@k": 0.0,
+          "f1@k": 0.0,
+          "top_k": 1,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "Nivek Ogre",
+              "title": "Nivek Ogre",
+              "score": 28.98162087622795
+            }
+          ]
+        },
+        {
+          "question_id": "5a87ab905542996e4f3088c1",
+          "question": "The arena where the Lewiston Maineiacs played their home games can seat how many people?",
+          "ground_truth": "3,677 seated",
+          "predicted_answer": "根据提供的文档，我无法回答这个问题。",
+          "answer_f1": 0.0,
+          "recall@k": 0.5,
+          "precision@k": 1.0,
+          "f1@k": 0.6666666666666666,
+          "top_k": 1,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "Lewiston Maineiacs",
+              "title": "Lewiston Maineiacs",
+              "score": 44.880045690066154
+            }
+          ]
+        },
+        {
+          "question_id": "5a7bbb64554299042af8f7cc",
+          "question": "Who is older, Annie Morton or Terry Richardson?",
+          "ground_truth": "Terry Richardson",
+          "predicted_answer": "根据提供的文档，我无法回答这个问题。",
+          "answer_f1": 0.0,
+          "recall@k": 0.0,
+          "precision@k": 0.0,
+          "f1@k": 0.0,
+          "top_k": 1,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "Alicia Morton",
+              "title": "Alicia Morton",
+              "score": 25.907018566722165
+            }
+          ]
+        },
+        {
+          "question_id": "5a8db19d5542994ba4e3dd00",
+          "question": "Are Local H and For Against both from the United States?",
+          "ground_truth": "yes",
+          "predicted_answer": "Local H is from the United States, but the document provides no information about For Against’s origin.  \nTherefore: **Based on the provided document, I cannot confirm whether For Against is from the United States.**",
+          "answer_f1": 0.0,
+          "recall@k": 0.0,
+          "precision@k": 0.0,
+          "f1@k": 0.0,
+          "top_k": 1,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "The Team EP",
+              "title": "The Team EP",
+              "score": 27.413944393533484
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "top_k": 3,
+      "summary": {
+        "avg_recall": 0.35,
+        "avg_precision": 0.2333333333333333,
+        "avg_f1k": 0.27999999999999997,
+        "avg_answer_f1": 0.1
+      },
+      "correlations": {
+        "recall_vs_answer_f1": 0.21821789023599233,
+        "precision_vs_answer_f1": 0.21821789023599242,
+        "f1k_vs_answer_f1": 0.21821789023599233
+      },
+      "group_stats": {
+        "low (0-0.3)": {
+          "count": 3,
+          "avg_answer_f1": 0.0,
+          "std_answer_f1": 0.0
+        },
+        "medium (0.3-0.6)": {
+          "count": 7,
+          "avg_answer_f1": 0.14285714285714285,
+          "std_answer_f1": 0.3499271061118826
+        },
+        "high (0.6-1.0)": {
+          "count": 0,
+          "avg_answer_f1": 0.0,
+          "std_answer_f1": 0.0
+        }
+      },
+      "detailed_results": [
+        {
+          "question_id": "5a8b57f25542995d1e6f1371",
+          "question": "Were Scott Derrickson and Ed Wood of the same nationality?",
+          "ground_truth": "yes",
+          "predicted_answer": "否。Scott Derrickson 是美国人（执导了美国电影《The Exorcism of Emily Rose》和《Sinister》），而 Ed Wood Sr. 是20世纪初阿肯色州的种植园主、商人，也是美国人。因此，他们是同一国籍（美国）。  \n\n但需注意：问题中“Ed Wood”应指文档1中的“Ed Wood Sr.”（阿肯色州历史人物），而非著名导演Ed Wood Jr.（以《忽男忽女》闻名的美国导演）。文档中未提及其子，仅提及Ed Wood Sr.，且明确其为美国阿肯色州的实业家。  \n\n答案：是，两人均为美国人。  \n\n简洁准确回答：**是，都是美国人。**",
+          "answer_f1": 0.0,
+          "recall@k": 0.0,
+          "precision@k": 0.0,
+          "f1@k": 0.0,
+          "top_k": 3,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "Woodson, Arkansas",
+              "title": "Woodson, Arkansas",
+              "score": 33.52901474109399
+            },
+            {
+              "id": "The Exorcism of Emily Rose",
+              "title": "The Exorcism of Emily Rose",
+              "score": 30.298182276951533
+            },
+            {
+              "id": "Sinister (film)",
+              "title": "Sinister (film)",
+              "score": 29.62097915163719
+            }
+          ]
+        },
+        {
+          "question_id": "5a8c7595554299585d9e36b6",
+          "question": "What government position was held by the woman who portrayed Corliss Archer in the film Kiss and Tell?",
+          "ground_truth": "Chief of Protocol",
+          "predicted_answer": "根据提供的文档，我无法回答这个问题。",
+          "answer_f1": 0.0,
+          "recall@k": 0.0,
+          "precision@k": 0.0,
+          "f1@k": 0.0,
+          "top_k": 3,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "A Kiss for Corliss",
+              "title": "A Kiss for Corliss",
+              "score": 49.14679072845003
+            },
+            {
+              "id": "Meet Corliss Archer (TV series)",
+              "title": "Meet Corliss Archer (TV series)",
+              "score": 42.955865617021274
+            },
+            {
+              "id": "What Every Woman Knows (1934 film)",
+              "title": "What Every Woman Knows (1934 film)",
+              "score": 41.58019966529916
+            }
+          ]
+        },
+        {
+          "question_id": "5a85ea095542994775f606a8",
+          "question": "What science fantasy young adult series, told in first person, has a set of companion books narrating the stories of enslaved worlds and alien species?",
+          "ground_truth": "Animorphs",
+          "predicted_answer": "根据提供的文档，我无法回答这个问题。",
+          "answer_f1": 0.0,
+          "recall@k": 0.5,
+          "precision@k": 0.3333333333333333,
+          "f1@k": 0.4,
+          "top_k": 3,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "Animorphs",
+              "title": "Animorphs",
+              "score": 75.99526624342137
+            },
+            {
+              "id": "Isaac Asimov's Magical Worlds of Fantasy",
+              "title": "Isaac Asimov's Magical Worlds of Fantasy",
+              "score": 60.39129416669674
+            },
+            {
+              "id": "The Many Worlds of Poul Anderson",
+              "title": "The Many Worlds of Poul Anderson",
+              "score": 59.888693502387035
+            }
+          ]
+        },
+        {
+          "question_id": "5adbf0a255429947ff17385a",
+          "question": "Are the Laleli Mosque and Esma Sultan Mansion located in the same neighborhood?",
+          "ground_truth": "no",
+          "predicted_answer": "根据提供的文档，我无法回答这个问题。",
+          "answer_f1": 0.0,
+          "recall@k": 0.5,
+          "precision@k": 0.3333333333333333,
+          "f1@k": 0.4,
+          "top_k": 3,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "Esma Sultan Mansion",
+              "title": "Esma Sultan Mansion",
+              "score": 54.50331864999655
+            },
+            {
+              "id": "King Mosque, Berat",
+              "title": "King Mosque, Berat",
+              "score": 45.4847306510211
+            },
+            {
+              "id": "New Mosque (Istanbul)",
+              "title": "New Mosque (Istanbul)",
+              "score": 45.03092744392849
+            }
+          ]
+        },
+        {
+          "question_id": "5a8e3ea95542995a26add48d",
+          "question": "The director of the romantic comedy \"Big Stone Gap\" is based in what New York city?",
+          "ground_truth": "Greenwich Village, New York City",
+          "predicted_answer": "根据提供的文档，我无法回答这个问题。",
+          "answer_f1": 0.0,
+          "recall@k": 0.5,
+          "precision@k": 0.3333333333333333,
+          "f1@k": 0.4,
+          "top_k": 3,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "Big Stone Gap (film)",
+              "title": "Big Stone Gap (film)",
+              "score": 41.06496745843621
+            },
+            {
+              "id": "I Love NY (2015 film)",
+              "title": "I Love NY (2015 film)",
+              "score": 38.95234502133512
+            },
+            {
+              "id": "Great Stone of Fourstones",
+              "title": "Great Stone of Fourstones",
+              "score": 38.73501251979308
+            }
+          ]
+        },
+        {
+          "question_id": "5abd94525542992ac4f382d2",
+          "question": "2014 S/S is the debut album of a South Korean boy group that was formed by who?",
+          "ground_truth": "YG Entertainment",
+          "predicted_answer": "YG Entertainment",
+          "answer_f1": 1.0,
+          "recall@k": 0.5,
+          "precision@k": 0.3333333333333333,
+          "f1@k": 0.4,
+          "top_k": 3,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "2014 S/S",
+              "title": "2014 S/S",
+              "score": 62.42886102626306
+            },
+            {
+              "id": "Seventeen discography",
+              "title": "Seventeen discography",
+              "score": 52.6353981809443
+            },
+            {
+              "id": "SF9 (band)",
+              "title": "SF9 (band)",
+              "score": 48.74290500821244
+            }
+          ]
+        },
+        {
+          "question_id": "5a85b2d95542997b5ce40028",
+          "question": "Who was known by his stage name Aladin and helped organizations improve their performance as a consultant?",
+          "ground_truth": "Eenasul Fateh",
+          "predicted_answer": "根据提供的文档，我无法回答这个问题。",
+          "answer_f1": 0.0,
+          "recall@k": 0.0,
+          "precision@k": 0.0,
+          "f1@k": 0.0,
+          "top_k": 3,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "Nivek Ogre",
+              "title": "Nivek Ogre",
+              "score": 28.98162087622795
+            },
+            {
+              "id": "Manorama (Tamil actress)",
+              "title": "Manorama (Tamil actress)",
+              "score": 28.88024157824138
+            },
+            {
+              "id": "The Young Black Stallion",
+              "title": "The Young Black Stallion",
+              "score": 28.790786066253187
+            }
+          ]
+        },
+        {
+          "question_id": "5a87ab905542996e4f3088c1",
+          "question": "The arena where the Lewiston Maineiacs played their home games can seat how many people?",
+          "ground_truth": "3,677 seated",
+          "predicted_answer": "根据提供的文档，我无法回答这个问题。",
+          "answer_f1": 0.0,
+          "recall@k": 0.5,
+          "precision@k": 0.3333333333333333,
+          "f1@k": 0.4,
+          "top_k": 3,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "Lewiston Maineiacs",
+              "title": "Lewiston Maineiacs",
+              "score": 44.880045690066154
+            },
+            {
+              "id": "2006–07 QMJHL season",
+              "title": "2006–07 QMJHL season",
+              "score": 44.79927256000488
+            },
+            {
+              "id": "Dwyer Arena",
+              "title": "Dwyer Arena",
+              "score": 35.435008461761065
+            }
+          ]
+        },
+        {
+          "question_id": "5a7bbb64554299042af8f7cc",
+          "question": "Who is older, Annie Morton or Terry Richardson?",
+          "ground_truth": "Terry Richardson",
+          "predicted_answer": "根据提供的文档，我无法回答这个问题。",
+          "answer_f1": 0.0,
+          "recall@k": 0.5,
+          "precision@k": 0.3333333333333333,
+          "f1@k": 0.4,
+          "top_k": 3,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "Alicia Morton",
+              "title": "Alicia Morton",
+              "score": 25.907018566722165
+            },
+            {
+              "id": "Annie Morton",
+              "title": "Annie Morton",
+              "score": 24.78676935818203
+            },
+            {
+              "id": "Morton number",
+              "title": "Morton number",
+              "score": 21.598842980048563
+            }
+          ]
+        },
+        {
+          "question_id": "5a8db19d5542994ba4e3dd00",
+          "question": "Are Local H and For Against both from the United States?",
+          "ground_truth": "yes",
+          "predicted_answer": "Local H is from the United States (as stated in Document 2: “an American rock band originally formed [...] in Zion, Illinois in 1987”).  \nThe provided documents contain no information about the band “For Against”.  \n\nTherefore: **Local H is from the United States; for For Against, the documents provide no information.**  \n→ Based on the given documents, I cannot confirm whether For Against is from the United States.\n\nAnswer: **Local H is from the United States; according to the provided documents, I cannot determine the origin of For Against.**",
+          "answer_f1": 0.0,
+          "recall@k": 0.5,
+          "precision@k": 0.3333333333333333,
+          "f1@k": 0.4,
+          "top_k": 3,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "The Team EP",
+              "title": "The Team EP",
+              "score": 27.413944393533484
+            },
+            {
+              "id": "Local H",
+              "title": "Local H",
+              "score": 27.07500309538102
+            },
+            {
+              "id": "H Mart",
+              "title": "H Mart",
+              "score": 24.52290712005852
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "top_k": 5,
+      "summary": {
+        "avg_recall": 0.45,
+        "avg_precision": 0.18,
+        "avg_f1k": 0.2571428571428571,
+        "avg_answer_f1": 0.22177472667175185
+      },
+      "correlations": {
+        "recall_vs_answer_f1": 0.07539078676186022,
+        "precision_vs_answer_f1": 0.0753907867618602,
+        "f1k_vs_answer_f1": 0.07539078676186022
+      },
+      "group_stats": {
+        "low (0-0.3)": {
+          "count": 2,
+          "avg_answer_f1": 0.031578947368421054,
+          "std_answer_f1": 0.031578947368421054
+        },
+        "medium (0.3-0.6)": {
+          "count": 7,
+          "avg_answer_f1": 0.30779848171152524,
+          "std_answer_f1": 0.4393268716006905
+        },
+        "high (0.6-1.0)": {
+          "count": 1,
+          "avg_answer_f1": 0.0,
+          "std_answer_f1": 0.0
+        }
+      },
+      "detailed_results": [
+        {
+          "question_id": "5a8b57f25542995d1e6f1371",
+          "question": "Were Scott Derrickson and Ed Wood of the same nationality?",
+          "ground_truth": "yes",
+          "predicted_answer": "是的，Scott Derrickson 和 Ed Wood 都是美国人。  \n（依据：文档 4 指出 Scott Derrickson 是“American director, screenwriter and producer”；文档 1 提到 Ed Wood Sr. 是“a prominent plantation owner, trader, and businessman at the turn of the 20th century”在阿肯色州 Pulaski County 的 Woodson，属美国。）",
+          "answer_f1": 0.0,
+          "recall@k": 0.5,
+          "precision@k": 0.2,
+          "f1@k": 0.28571428571428575,
+          "top_k": 5,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "Woodson, Arkansas",
+              "title": "Woodson, Arkansas",
+              "score": 33.52901474109399
+            },
+            {
+              "id": "The Exorcism of Emily Rose",
+              "title": "The Exorcism of Emily Rose",
+              "score": 30.298182276951533
+            },
+            {
+              "id": "Sinister (film)",
+              "title": "Sinister (film)",
+              "score": 29.62097915163719
+            },
+            {
+              "id": "Scott Derrickson",
+              "title": "Scott Derrickson",
+              "score": 27.95196635373297
+            },
+            {
+              "id": "The Right Stuff (film)",
+              "title": "The Right Stuff (film)",
+              "score": 26.167337504584292
+            }
+          ]
+        },
+        {
+          "question_id": "5a8c7595554299585d9e36b6",
+          "question": "What government position was held by the woman who portrayed Corliss Archer in the film Kiss and Tell?",
+          "ground_truth": "Chief of Protocol",
+          "predicted_answer": "Shirley Temple portrayed Corliss Archer in the film *Kiss and Tell* (1945), but she did not hold any government position. She was an actress and later served as a U.S. diplomat (e.g., U.S. Ambassador to Ghana and Czechoslovakia, and Chief of Protocol of the United States), but those roles were **after** her film career and are **not mentioned in the provided documents**.\n\nThe documents only state:  \n- *[Document 1]* Shirley Temple starred in *A Kiss for Corliss* (1949) as Corliss Archer — her final film role.  \n- *Kiss and Tell* (1945) is cited as the predecessor film, but no details about Temple’s portrayal or post-film career are given in the documents.\n\nSince **none of the documents mention Shirley Temple holding any government position**, the answer is:\n\n**According to the provided documents, no government position held by Shirley Temple is mentioned.**",
+          "answer_f1": 0.06315789473684211,
+          "recall@k": 0.0,
+          "precision@k": 0.0,
+          "f1@k": 0.0,
+          "top_k": 5,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "A Kiss for Corliss",
+              "title": "A Kiss for Corliss",
+              "score": 49.14679072845003
+            },
+            {
+              "id": "Meet Corliss Archer (TV series)",
+              "title": "Meet Corliss Archer (TV series)",
+              "score": 42.955865617021274
+            },
+            {
+              "id": "What Every Woman Knows (1934 film)",
+              "title": "What Every Woman Knows (1934 film)",
+              "score": 41.58019966529916
+            },
+            {
+              "id": "Nora Lewin",
+              "title": "Nora Lewin",
+              "score": 40.077969929112626
+            },
+            {
+              "id": "Prime Minister of Zimbabwe",
+              "title": "Prime Minister of Zimbabwe",
+              "score": 40.03306128007296
+            }
+          ]
+        },
+        {
+          "question_id": "5a85ea095542994775f606a8",
+          "question": "What science fantasy young adult series, told in first person, has a set of companion books narrating the stories of enslaved worlds and alien species?",
+          "ground_truth": "Animorphs",
+          "predicted_answer": "Animorphs",
+          "answer_f1": 1.0,
+          "recall@k": 0.5,
+          "precision@k": 0.2,
+          "f1@k": 0.28571428571428575,
+          "top_k": 5,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "Animorphs",
+              "title": "Animorphs",
+              "score": 75.99526624342137
+            },
+            {
+              "id": "Isaac Asimov's Magical Worlds of Fantasy",
+              "title": "Isaac Asimov's Magical Worlds of Fantasy",
+              "score": 60.39129416669674
+            },
+            {
+              "id": "The Many Worlds of Poul Anderson",
+              "title": "The Many Worlds of Poul Anderson",
+              "score": 59.888693502387035
+            },
+            {
+              "id": "A Wind in the Door",
+              "title": "A Wind in the Door",
+              "score": 59.244839375724325
+            },
+            {
+              "id": "Wizards (Asimov anthology)",
+              "title": "Wizards (Asimov anthology)",
+              "score": 58.06423200846728
+            }
+          ]
+        },
+        {
+          "question_id": "5adbf0a255429947ff17385a",
+          "question": "Are the Laleli Mosque and Esma Sultan Mansion located in the same neighborhood?",
+          "ground_truth": "no",
+          "predicted_answer": "No. The Laleli Mosque is located in the Laleli neighborhood of Fatih, Istanbul, while the Esma Sultan Mansion is located in the Ortaköy neighborhood of Istanbul.",
+          "answer_f1": 0.0,
+          "recall@k": 1.0,
+          "precision@k": 0.4,
+          "f1@k": 0.5714285714285715,
+          "top_k": 5,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "Esma Sultan Mansion",
+              "title": "Esma Sultan Mansion",
+              "score": 54.50331864999655
+            },
+            {
+              "id": "King Mosque, Berat",
+              "title": "King Mosque, Berat",
+              "score": 45.4847306510211
+            },
+            {
+              "id": "New Mosque (Istanbul)",
+              "title": "New Mosque (Istanbul)",
+              "score": 45.03092744392849
+            },
+            {
+              "id": "Laleli Mosque",
+              "title": "Laleli Mosque",
+              "score": 44.319793428370154
+            },
+            {
+              "id": "Sultan Ahmed Mosque",
+              "title": "Sultan Ahmed Mosque",
+              "score": 44.20697061895502
+            }
+          ]
+        },
+        {
+          "question_id": "5a8e3ea95542995a26add48d",
+          "question": "The director of the romantic comedy \"Big Stone Gap\" is based in what New York city?",
+          "ground_truth": "Greenwich Village, New York City",
+          "predicted_answer": "根据文档1，电影《Big Stone Gap》的导演是Adriana Trigiani，但文档中未提及她所在的纽约城市。\n\n文档4提到Alexander Garvin在纽约市（New York City）执业，但他是城市规划师，与《Big Stone Gap》无关。\n\n文档中没有任何信息表明《Big Stone Gap》的导演Adriana Trigiani基于哪个纽约城市。\n\n因此，答案是：**根据提供的文档，我无法回答这个问题。**",
+          "answer_f1": 0.1111111111111111,
+          "recall@k": 0.5,
+          "precision@k": 0.2,
+          "f1@k": 0.28571428571428575,
+          "top_k": 5,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "Big Stone Gap (film)",
+              "title": "Big Stone Gap (film)",
+              "score": 41.06496745843621
+            },
+            {
+              "id": "I Love NY (2015 film)",
+              "title": "I Love NY (2015 film)",
+              "score": 38.95234502133512
+            },
+            {
+              "id": "Great Stone of Fourstones",
+              "title": "Great Stone of Fourstones",
+              "score": 38.73501251979308
+            },
+            {
+              "id": "Alexander Garvin",
+              "title": "Alexander Garvin",
+              "score": 38.29499237366064
+            },
+            {
+              "id": "Sex and the City (film)",
+              "title": "Sex and the City (film)",
+              "score": 37.57923585186372
+            }
+          ]
+        },
+        {
+          "question_id": "5abd94525542992ac4f382d2",
+          "question": "2014 S/S is the debut album of a South Korean boy group that was formed by who?",
+          "ground_truth": "YG Entertainment",
+          "predicted_answer": "YG Entertainment",
+          "answer_f1": 1.0,
+          "recall@k": 0.5,
+          "precision@k": 0.2,
+          "f1@k": 0.28571428571428575,
+          "top_k": 5,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "2014 S/S",
+              "title": "2014 S/S",
+              "score": 62.42886102626306
+            },
+            {
+              "id": "Seventeen discography",
+              "title": "Seventeen discography",
+              "score": 52.6353981809443
+            },
+            {
+              "id": "SF9 (band)",
+              "title": "SF9 (band)",
+              "score": 48.74290500821244
+            },
+            {
+              "id": "Madtown",
+              "title": "Madtown",
+              "score": 47.99333695533133
+            },
+            {
+              "id": "Girls (EXO-CBX EP)",
+              "title": "Girls (EXO-CBX EP)",
+              "score": 47.9724961097682
+            }
+          ]
+        },
+        {
+          "question_id": "5a85b2d95542997b5ce40028",
+          "question": "Who was known by his stage name Aladin and helped organizations improve their performance as a consultant?",
+          "ground_truth": "Eenasul Fateh",
+          "predicted_answer": "根据提供的文档，我无法回答这个问题。",
+          "answer_f1": 0.0,
+          "recall@k": 0.0,
+          "precision@k": 0.0,
+          "f1@k": 0.0,
+          "top_k": 5,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "Nivek Ogre",
+              "title": "Nivek Ogre",
+              "score": 28.98162087622795
+            },
+            {
+              "id": "Manorama (Tamil actress)",
+              "title": "Manorama (Tamil actress)",
+              "score": 28.88024157824138
+            },
+            {
+              "id": "The Young Black Stallion",
+              "title": "The Young Black Stallion",
+              "score": 28.790786066253187
+            },
+            {
+              "id": "Mugihito",
+              "title": "Mugihito",
+              "score": 28.3101818802674
+            },
+            {
+              "id": "Method Man",
+              "title": "Method Man",
+              "score": 28.172235399401014
+            }
+          ]
+        },
+        {
+          "question_id": "5a87ab905542996e4f3088c1",
+          "question": "The arena where the Lewiston Maineiacs played their home games can seat how many people?",
+          "ground_truth": "3,677 seated",
+          "predicted_answer": "根据提供的文档，我无法回答这个问题。",
+          "answer_f1": 0.0,
+          "recall@k": 0.5,
+          "precision@k": 0.2,
+          "f1@k": 0.28571428571428575,
+          "top_k": 5,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "Lewiston Maineiacs",
+              "title": "Lewiston Maineiacs",
+              "score": 44.880045690066154
+            },
+            {
+              "id": "2006–07 QMJHL season",
+              "title": "2006–07 QMJHL season",
+              "score": 44.79927256000488
+            },
+            {
+              "id": "Dwyer Arena",
+              "title": "Dwyer Arena",
+              "score": 35.435008461761065
+            },
+            {
+              "id": "2011–12 QMJHL season",
+              "title": "2011–12 QMJHL season",
+              "score": 35.31976185869823
+            },
+            {
+              "id": "Billings Bulls",
+              "title": "Billings Bulls",
+              "score": 34.900067067811435
+            }
+          ]
+        },
+        {
+          "question_id": "5a7bbb64554299042af8f7cc",
+          "question": "Who is older, Annie Morton or Terry Richardson?",
+          "ground_truth": "Terry Richardson",
+          "predicted_answer": "Annie Morton is older.  \nAnnie Morton was born on October 8, 1970.  \nTerry Richardson is not assigned a birth date in the provided documents, but he is widely known (outside the given documents) to have been born in 1965 — however, **since the documents do not provide Terry Richardson’s birth date**, we cannot determine his age from the given information.\n\nTherefore, based **only on the provided documents**, we know Annie Morton’s birth date (1970), but **no age information is given for Terry Richardson**.\n\n✅ Correct answer: **According to the provided documents, I cannot determine who is older, because Terry Richardson’s birth date is not given.**  \n\nBut the question asks: *Who is older, Annie Morton or Terry Richardson?*  \nAnd the instruction says: *If the document does not have enough information, say \"According to the provided document, I cannot answer this question.\"*\n\nSo final answer:\n\nAccording to the provided document, I cannot answer this question.",
+          "answer_f1": 0.04347826086956522,
+          "recall@k": 0.5,
+          "precision@k": 0.2,
+          "f1@k": 0.28571428571428575,
+          "top_k": 5,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "Alicia Morton",
+              "title": "Alicia Morton",
+              "score": 25.907018566722165
+            },
+            {
+              "id": "Annie Morton",
+              "title": "Annie Morton",
+              "score": 24.78676935818203
+            },
+            {
+              "id": "Morton number",
+              "title": "Morton number",
+              "score": 21.598842980048563
+            },
+            {
+              "id": "Ceanothus leucodermis",
+              "title": "Ceanothus leucodermis",
+              "score": 18.99629624899821
+            },
+            {
+              "id": "Annie Get Your Gun (musical)",
+              "title": "Annie Get Your Gun (musical)",
+              "score": 17.079779011724185
+            }
+          ]
+        },
+        {
+          "question_id": "5a8db19d5542994ba4e3dd00",
+          "question": "Are Local H and For Against both from the United States?",
+          "ground_truth": "yes",
+          "predicted_answer": "Local H is from the United States (as stated in Document 2: “an American rock band... in Zion, Illinois in 1987”).  \nThe document provides no information about the band “For Against”.  \n\nTherefore: **Local H is from the United States; for For Against, the documents give no information.**  \n→ Based on the provided documents, I cannot confirm whether For Against is from the United States.\n\nAnswer: **Local H is from the United States; according to the provided documents, I cannot determine the origin of For Against.**",
+          "answer_f1": 0.0,
+          "recall@k": 0.5,
+          "precision@k": 0.2,
+          "f1@k": 0.28571428571428575,
+          "top_k": 5,
+          "retriever": "BM25",
+          "retrieved_docs": [
+            {
+              "id": "The Team EP",
+              "title": "The Team EP",
+              "score": 27.413944393533484
+            },
+            {
+              "id": "Local H",
+              "title": "Local H",
+              "score": 27.07500309538102
+            },
+            {
+              "id": "H Mart",
+              "title": "H Mart",
+              "score": 24.52290712005852
+            },
+            {
+              "id": "Aziz Ibrahim",
+              "title": "Aziz Ibrahim",
+              "score": 22.73575924759577
+            },
+            {
+              "id": "Vermont gubernatorial election, 2014",
+              "title": "Vermont gubernatorial election, 2014",
+              "score": 21.42175186608592
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
