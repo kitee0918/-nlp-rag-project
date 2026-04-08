@@ -60,6 +60,14 @@ from transformers import AutoTokenizer, AutoModel
 from openai import OpenAI
 import httpx
 
+# Colab 环境检测
+IN_COLAB = False
+try:
+    import google.colab
+    IN_COLAB = True
+except ImportError:
+    pass
+
 # ============================================
 # 配置部分
 # ============================================
@@ -84,6 +92,11 @@ class Config:
     
     # 模型名称
     QWEN_MODEL = "qwen-plus"  # 或 qwen-turbo, qwen-max 等
+    
+    # Llama 模型配置 (Colab 本地运行)
+    LLAMA_MODEL_PATH = "/content/models/llama-3.1-8b"  # Colab 默认路径
+    # 本地环境路径（如果本地运行）
+    # LLAMA_MODEL_PATH = "./models/llama-3.1-8b"
     
     # 缓存路径
     CACHE_DIR = "./cache"
@@ -557,6 +570,232 @@ class QwenGenerator:
 
 
 # ============================================
+# LLM 生成器（本地 Llama 模型 - Colab 专用）
+# ============================================
+
+class LlamaGenerator:
+    """本地 Llama 模型生成器 - 适用于 Colab 环境"""
+    
+    def __init__(
+        self, 
+        model_path: str = None, 
+        device: str = None,
+        load_in_8bit: bool = True,
+        load_in_4bit: bool = False
+    ):
+        """
+        初始化 Llama 生成器
+        
+        Args:
+            model_path: 模型路径（默认使用 Config.LLAMA_MODEL_PATH）
+            device: 运行设备
+            load_in_8bit: 是否使用 8bit 量化（节省显存）
+            load_in_4bit: 是否使用 4bit 量化（更省显存）
+        """
+        self.model_path = model_path or Config.LLAMA_MODEL_PATH
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        
+        print(f"正在加载 Llama 模型: {self.model_path}")
+        print(f"设备: {self.device}")
+        
+        # 检查模型路径是否存在
+        if not os.path.exists(self.model_path):
+            raise ValueError(
+                f"模型路径不存在: {self.model_path}\n"
+                f"请先下载模型或检查路径是否正确。\n"
+                f"下载方法: 使用 llama/download_model.py"
+            )
+        
+        
+        # 加载 tokenizer
+        from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+        
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.model_path,
+            trust_remote_code=True
+        )
+        
+        # 设置 pad_token
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+        
+        
+        # 量化配置
+        quantization_config = None
+        if load_in_4bit:
+            from transformers import BitsAndBytesConfig
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_quant_type="nf4"
+            )
+            print("使用 4bit 量化")
+        elif load_in_8bit:
+            from transformers import BitsAndBytesConfig
+            quantization_config = BitsAndBytesConfig(
+                load_in_8bit=True
+            )
+            print("使用 8bit 量化")
+        else:
+            print("使用全精度 (FP16)")
+        
+        # 加载模型
+        self.model = AutoModelForCausalLM.from_pretrained(
+            self.model_path,
+            torch_dtype=torch.float16,
+            device_map="auto" if self.device == "cuda" else None,
+            quantization_config=quantization_config,
+            trust_remote_code=True
+        )
+        
+        if self.device == "cpu":
+            self.model = self.model.to(self.device)
+        
+        self.model.eval()
+        
+        # 创建 pipeline
+        self.pipe = pipeline(
+            "text-generation",
+            model=self.model,
+            tokenizer=self.tokenizer,
+            torch_dtype=torch.float16,
+            device_map="auto" if self.device == "cuda" else None
+        )
+        
+        print(f"Llama 模型加载完成！")
+        
+        # 保存引用
+        self.pipeline_module = pipeline
+    
+    def format_context(self, documents: List[Dict]) -> str:
+        """格式化检索到的文档"""
+        context_parts = []
+        for i, doc in enumerate(documents, 1):
+            title = doc.get('title', 'Unknown')
+            context_parts.append(f"[Document {i}] {title}\n{doc['text']}\n")
+        return "\n".join(context_parts)
+    
+    
+    def generate(self, question: str, documents: List[Dict]) -> Dict:
+        """
+        根据问题和检索文档生成答案
+        
+        Args:
+            question: 问题
+            documents: 检索到的文档列表
+            
+        Returns:
+            生成结果字典
+        """
+        context = self.format_context(documents)
+        
+        # Llama-3-Instruct 格式的 prompt
+        prompt = f"""You are a helpful AI assistant. Answer the question based on the provided documents.
+If the documents don't contain enough information, say "I cannot answer this question based on the provided documents."
+
+Documents:
+{context}
+
+Question: {question}
+
+Please provide a concise and accurate answer:"""
+        
+        try:
+            # 使用 Llama-3-Instruct 的对话格式
+            messages = [
+                {"role": "system", "content": "You are a helpful AI assistant that answers questions based on provided documents."},
+                {"role": "user", "content": prompt}
+            ]
+            
+            # 应用聊天模板
+            input_ids = self.tokenizer.apply_chat_template(
+                messages, 
+                add_generation_prompt=True,
+                return_tensors="pt"
+            ).to(self.model.device)
+            
+            # 生成
+            with torch.no_grad():
+                outputs = self.model.generate(
+                    input_ids,
+                    max_new_tokens=256,
+                    do_sample=True,
+                    temperature=0.7,
+                    top_p=0.9,
+                    pad_token_id=self.tokenizer.eos_token_id
+                )
+            
+            # 解码
+            generated_text = self.tokenizer.decode(
+                outputs[0][input_ids.shape[-1]:], 
+                skip_special_tokens=True
+            )
+            
+            return {
+                "answer": generated_text.strip(),
+                "prompt": prompt,
+                "model": f"Llama-3.1-8B-Instruct"
+            }
+            
+        except Exception as e:
+            error_msg = str(e)
+            error_type = type(e).__name__
+            print(f"\n生成错误 [{error_type}]: {error_msg}")
+            return {
+                "answer": "",
+                "prompt": prompt,
+                "model": "Llama-3.1-8B-Instruct",
+                "error": error_msg,
+                "error_type": error_type
+            }
+    
+    def get_name(self) -> str:
+        return "Llama-3.1-8B-Instruct"
+
+
+# ============================================
+# 通用 LLM 生成器工厂
+# ============================================
+
+def create_generator(
+    generator_type: str = "qwen",
+    model: str = None,
+    api_key: str = None,
+    model_path: str = None,
+    device: str = None,
+    **kwargs
+):
+    """
+    创建生成器的工厂函数
+    
+    Args:
+        generator_type: 生成器类型 ("qwen" 或 "llama")
+        model: Qwen 模型名称 (仅 qwen 类型)
+        api_key: DashScope API Key (仅 qwen 类型)
+        model_path: Llama 模型路径 (仅 llama 类型)
+        device: 运行设备 (仅 llama 类型)
+        
+    Returns:
+        生成器实例
+    """
+    generator_type = generator_type.lower()
+    
+    if generator_type == "qwen":
+        return QwenGenerator(
+            api_key=api_key,
+            model=model or Config.QWEN_MODEL
+        )
+    elif generator_type == "llama":
+        return LlamaGenerator(
+            model_path=model_path,
+            device=device
+        )
+    else:
+        raise ValueError(f"不支持的生成器类型: {generator_type}. 可选: qwen, llama")
+
+
+# ============================================
 # RAG 系统
 # ============================================
 
@@ -748,8 +987,12 @@ def main():
                         help="测试样本数量")
     parser.add_argument("--top_k", type=int, default=Config.RETRIEVAL_K,
                         help="检索文档数量")
+    parser.add_argument("--generator-type", type=str, default="qwen", choices=["qwen", "llama"],
+                        help="生成器类型: qwen (API) 或 llama (本地)")
     parser.add_argument("--model", type=str, default="qwen-plus",
-                        help="Qwen 模型名称")
+                        help="Qwen 模型名称 (仅当 --generator-type=qwen 时有效)")
+    parser.add_argument("--llama-model-path", type=str, default=Config.LLAMA_MODEL_PATH,
+                        help="Llama 模型路径 (仅当 --generator-type=llama 时有效)")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",
                         help="运行设备")
     
@@ -762,7 +1005,11 @@ def main():
     print(f"检索方法: {args.retriever}")
     print(f"测试样本: {args.subset}")
     print(f"Top-K: {args.top_k}")
-    print(f"生成模型: {args.model}")
+    print(f"生成器类型: {args.generator_type}")
+    if args.generator_type == "qwen":
+        print(f"生成模型: {args.model}")
+    else:
+        print(f"模型路径: {args.llama_model_path}")
     print(f"设备: {args.device}")
     print("=" * 60)
     
@@ -789,13 +1036,20 @@ def main():
         )
     
     # 3. 初始化生成器
-    generator = QwenGenerator(model=args.model)
+    if args.generator_type == "llama":
+        generator = LlamaGenerator(
+            model_path=args.llama_model_path,
+            device=args.device
+        )
+    else:
+        generator = QwenGenerator(model=args.model)
     
     # 4. 运行实验
+    generator_name = args.model if args.generator_type == "qwen" else "llama"
     results = []
     for retriever_name, retriever in retrievers.items():
         print(f"\n{'='*60}")
-        print(f"测试配置: {retriever_name} + {args.model}")
+        print(f"测试配置: {retriever_name} + {generator_name}")
         print(f"{'='*60}")
         
         # 创建 RAG 系统
@@ -815,7 +1069,7 @@ def main():
     # 5. 保存结果
     result_file = os.path.join(
         Config.RESULTS_DIR, 
-        f"results_{args.retriever}_{args.model}_{args.subset}.json"
+        f"results_{args.retriever}_{generator_name}_{args.subset}.json"
     )
     with open(result_file, 'w', encoding='utf-8') as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
@@ -846,14 +1100,23 @@ def run_comparison_experiment(
     model: str = "qwen-plus",
     api_key: str = None,
     device: str = None,
-    use_retrievers: List[str] = None
+    use_retrievers: List[str] = None,
+    generator_type: str = "qwen",
+    llama_model_path: str = None
 ) -> Dict:
     """
     Colab 专用函数：运行 BM25 vs Contriever 对比实验
     
     在 Colab 中直接调用：
+        # 使用 Qwen (API)
         from rag_hotpotqa import run_comparison_experiment
         results = run_comparison_experiment(api_key="sk-xxx")
+        
+        # 使用本地 Llama 模型
+        results = run_comparison_experiment(
+            generator_type="llama",
+            llama_model_path="/content/models/llama-3.1-8b"
+        )
         
         # 快速调试：只用 BM25（跳过 Contriever 模型下载）
         results = run_comparison_experiment(api_key="sk-xxx", use_retrievers=["bm25"])
@@ -861,16 +1124,18 @@ def run_comparison_experiment(
     Args:
         subset_size: 测试样本数量，默认 100
         top_k: 检索文档数量，默认 3
-        model: Qwen 模型名称，默认 "qwen-plus"
+        model: Qwen 模型名称，默认 "qwen-plus" (仅当 generator_type="qwen" 时有效)
         api_key: DashScope API Key（如未提供，从环境变量读取）
         device: 运行设备（默认自动检测）
         use_retrievers: 要使用的检索器列表，可选 ["bm25", "contriever"]，默认两者都用
+        generator_type: 生成器类型，"qwen" 或 "llama"
+        llama_model_path: Llama 模型路径 (仅当 generator_type="llama" 时有效)
         
     Returns:
         包含检索器评估结果的字典
     """
-    # 设置 API Key
-    if api_key:
+    # 设置 API Key (仅 Qwen 需要)
+    if api_key and generator_type == "qwen":
         os.environ['DASHSCOPE_API_KEY'] = api_key
     
     # 检测设备
@@ -882,7 +1147,11 @@ def run_comparison_experiment(
     print("=" * 70)
     print(f"测试样本: {subset_size}")
     print(f"Top-K: {top_k}")
-    print(f"生成模型: {model}")
+    print(f"生成器类型: {generator_type.upper()}")
+    if generator_type == "qwen":
+        print(f"生成模型: {model}")
+    else:
+        print(f"模型路径: {llama_model_path or Config.LLAMA_MODEL_PATH}")
     print(f"设备: {device}")
     print("=" * 70)
     
@@ -924,10 +1193,16 @@ def run_comparison_experiment(
         retrievers.append(("Contriever", contriever_retriever))
     
     # 3. 初始化生成器
-    print(f"\n🤖 初始化生成器: {model}")
-    generator = QwenGenerator(model=model)
+    print(f"\n🤖 初始化生成器: {generator_type.upper()}")
+    if generator_type.lower() == "llama":
+        generator = LlamaGenerator(
+            model_path=llama_model_path,
+            device=device
+        )
+    else:
+        generator = QwenGenerator(model=model)
     
-    # 3. 运行实验
+    # 4. 运行实验
     results = {}
     
     for name, retriever in retrievers:
@@ -988,3 +1263,52 @@ def run_comparison_experiment(
         print(f"   F1@K:     {'+' if f1k_improve >= 0 else ''}{f1k_improve:.2f}%")
     
     return results
+
+
+# ============================================
+# Colab 专用：一键运行 Llama 实验
+# ============================================
+
+def run_llama_experiment(
+    subset_size: int = 100,
+    top_k: int = 3,
+    llama_model_path: str = "/content/models/llama-3.1-8b",
+    use_retrievers: List[str] = None,
+    use_8bit: bool = True
+) -> Dict:
+    """
+    Colab 专用：使用本地 Llama 模型运行 RAG 实验
+    
+    使用方法（在 Colab 中）:
+        # 1. 先下载模型（如果还没有）
+        from huggingface_hub import snapshot_download, login
+        login(token="your_hf_token")
+        snapshot_download(
+            repo_id="meta-llama/Meta-Llama-3.1-8B-Instruct",
+            local_dir="/content/models/llama-3.1-8b"
+        )
+        
+        # 2. 运行实验
+        from rag_hotpotqa import run_llama_experiment
+        results = run_llama_experiment(
+            subset_size=10,  # 快速测试用少量数据
+            llama_model_path="/content/models/llama-3.1-8b"
+        )
+    
+    Args:
+        subset_size: 测试样本数量
+        top_k: 检索文档数量
+        llama_model_path: Llama 模型路径
+        use_retrievers: 使用的检索器 ["bm25", "contriever"]
+        use_8bit: 是否使用 8bit 量化（节省显存）
+        
+    Returns:
+        实验结果字典
+    """
+    return run_comparison_experiment(
+        subset_size=subset_size,
+        top_k=top_k,
+        generator_type="llama",
+        llama_model_path=llama_model_path,
+        use_retrievers=use_retrievers
+    )
