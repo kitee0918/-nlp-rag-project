@@ -44,9 +44,15 @@ from rag_finance import (
 
 from hallucination_eval import (
     FActScoreEvaluator,
+    FActScoreLocalEvaluator,
     SelfRAGGenerator,
     HallucinationEvaluator,
-    HallucinationConfig
+    HallucinationConfig,
+    # 新增评估指标（复用自 helpers.py）
+    normalise,
+    retrieval_em,
+    generation_em,
+    generation_f1
 )
 
 
@@ -57,7 +63,7 @@ from hallucination_eval import (
 def evaluate_vanilla_rag(
     rag_system: RAGSystem,
     examples: List[Dict],
-    factscore_evaluator: FActScoreEvaluator,
+    factscore_evaluator,
     top_k: int = 3,
     verbose: bool = False
 ) -> Dict:
@@ -67,7 +73,7 @@ def evaluate_vanilla_rag(
     Args:
         rag_system: Vanilla RAG 系统实例
         examples: 测试示例
-        factscore_evaluator: FActScore 评估器
+        factscore_evaluator: FActScore 评估器（API 或本地版本）
         top_k: 检索文档数量
         verbose: 是否打印详细信息
         
@@ -77,11 +83,16 @@ def evaluate_vanilla_rag(
     factscores = []
     hit_at_ks = []
     f1_scores = []
+    gen_em_scores = []  # 新增：生成精确匹配
+    ret_em_scores = []  # 新增：检索精确匹配
     all_results = []
     
     for i, example in enumerate(examples):
         # 生成答案
         result = rag_system.answer(example['question'])
+        
+        # 获取检索文档
+        retrieved_docs = [doc for doc in result['retrieved_documents']]
         
         # 计算 FActScore
         factscore_result = factscore_evaluator.compute_factscore(
@@ -90,16 +101,26 @@ def evaluate_vanilla_rag(
             verbose=verbose and i < 3
         )
         
-        # 计算 Hit@K
-        retrieved_ids = [doc['id'] for doc in result['retrieved_documents']]
+        # 计算 Hit@K（引用质量）
+        retrieved_ids = [doc['id'] for doc in retrieved_docs]
         hit_at_k = 1.0 if example.get('evidence_doc') in retrieved_ids else 0.0
         
-        # 计算 F1
-        f1 = compute_f1(result['answer'], example['answer'])
+        # 计算 F1（使用改进的 generation_f1）
+        f1 = generation_f1(result['answer'], [example['answer']])
+        
+        # 新增：计算生成精确匹配
+        gen_em = generation_em(result['answer'], [example['answer']])
+        
+        # 新增：计算检索精确匹配
+        # 需要将检索文档转换为带 text 字段的字典
+        retrieved_docs_with_text = [{'text': doc.get('text', '')} for doc in retrieved_docs]
+        ret_em = retrieval_em(retrieved_docs_with_text, [example['answer']])
         
         factscores.append(factscore_result['factscore'])
         hit_at_ks.append(hit_at_k)
         f1_scores.append(f1)
+        gen_em_scores.append(gen_em)
+        ret_em_scores.append(ret_em)
         
         all_results.append({
             "question": example['question'],
@@ -108,6 +129,8 @@ def evaluate_vanilla_rag(
             "factscore": factscore_result['factscore'],
             "hit_at_k": hit_at_k,
             "f1": f1,
+            "gen_em": gen_em,
+            "ret_em": ret_em,
             "num_atoms": factscore_result['num_atoms'],
             "num_supported_atoms": factscore_result['num_supported_atoms']
         })
@@ -116,6 +139,8 @@ def evaluate_vanilla_rag(
         "avg_factscore": sum(factscores) / len(factscores) if factscores else 0.0,
         "avg_hit_at_k": sum(hit_at_ks) / len(hit_at_ks) if hit_at_ks else 0.0,
         "avg_f1": sum(f1_scores) / len(f1_scores) if f1_scores else 0.0,
+        "avg_gen_em": sum(gen_em_scores) / len(gen_em_scores) if gen_em_scores else 0.0,
+        "avg_ret_em": sum(ret_em_scores) / len(ret_em_scores) if ret_em_scores else 0.0,
         "num_examples": len(examples),
         "individual_results": all_results,
         "retriever": rag_system.retriever.get_name(),
@@ -152,14 +177,32 @@ def evaluate_self_rag(
         verbose=verbose
     )
     
-    # 计算 F1 分数
+    # 计算 F1 分数和其他指标
     f1_scores = []
+    gen_em_scores = []
+    ret_em_scores = []
+    
     for i, result in enumerate(results['individual_results']):
-        f1 = compute_f1(result['self_rag_answer'], examples[i]['answer'])
+        # 使用改进的 generation_f1
+        f1 = generation_f1(result['self_rag_answer'], [examples[i]['answer']])
         f1_scores.append(f1)
         result['f1'] = f1
+        
+        # 新增：生成精确匹配
+        gen_em = generation_em(result['self_rag_answer'], [examples[i]['answer']])
+        gen_em_scores.append(gen_em)
+        result['gen_em'] = gen_em
+        
+        # 新增：检索精确匹配
+        retrieved_docs = [{'text': doc.get('text', '')} for doc in result['retrieved_documents']]
+        ret_em = retrieval_em(retrieved_docs, [examples[i]['answer']])
+        ret_em_scores.append(ret_em)
+        result['ret_em'] = ret_em
+    
     
     results['avg_f1'] = sum(f1_scores) / len(f1_scores) if f1_scores else 0.0
+    results['avg_gen_em'] = sum(gen_em_scores) / len(gen_em_scores) if gen_em_scores else 0.0
+    results['avg_ret_em'] = sum(ret_em_scores) / len(ret_em_scores) if ret_em_scores else 0.0
     results['method'] = "Self-RAG"
     
     return results
@@ -261,9 +304,11 @@ def run_comparison(
     )
     
     print(f"\nVanilla RAG 结果:")
-    print(f"  FActScore: {vanilla_results['avg_factscore']:.4f}")
-    print(f"  Hit@K:     {vanilla_results['avg_hit_at_k']:.4f}")
-    print(f"  F1 Score:  {vanilla_results['avg_f1']:.4f}")
+    print(f"  FActScore:    {vanilla_results['avg_factscore']:.4f}")
+    print(f"  Hit@K:        {vanilla_results['avg_hit_at_k']:.4f}")
+    print(f"  F1 Score:     {vanilla_results['avg_f1']:.4f}")
+    print(f"  Gen EM:       {vanilla_results['avg_gen_em']:.4f}")
+    print(f"  Ret EM:       {vanilla_results['avg_ret_em']:.4f}")
     
     # 5. 评估 Self-RAG
     print("\n" + "=" * 70)
@@ -278,30 +323,39 @@ def run_comparison(
     )
     
     print(f"\nSelf-RAG 结果:")
-    print(f"  FActScore: {self_rag_results['avg_factscore']:.4f}")
-    print(f"  Hit@K:     {self_rag_results['avg_hit_at_k']:.4f}")
-    print(f"  F1 Score:  {self_rag_results['avg_f1']:.4f}")
-    print(f"  支持率:    {self_rag_results['support_rate']:.4f}")
+    print(f"  FActScore:    {self_rag_results['avg_factscore']:.4f}")
+    print(f"  Hit@K:        {self_rag_results['avg_hit_at_k']:.4f}")
+    print(f"  F1 Score:     {self_rag_results['avg_f1']:.4f}")
+    print(f"  Gen EM:       {self_rag_results['avg_gen_em']:.4f}")
+    print(f"  Ret EM:       {self_rag_results['avg_ret_em']:.4f}")
+    print(f"  支持率:       {self_rag_results['support_rate']:.4f}")
     
     # 6. 对比分析
-    print("\n" + "=" * 70)
+    print("\n" + "=" * 80)
     print("📈 对比结果")
-    print("=" * 70)
-    print(f"{'方法':<15} {'FActScore':<12} {'Hit@K':<12} {'F1 Score':<12}")
-    print("-" * 70)
-    print(f"{'Vanilla RAG':<15} {vanilla_results['avg_factscore']:<12.4f} {vanilla_results['avg_hit_at_k']:<12.4f} {vanilla_results['avg_f1']:<12.4f}")
-    print(f"{'Self-RAG':<15} {self_rag_results['avg_factscore']:<12.4f} {self_rag_results['avg_hit_at_k']:<12.4f} {self_rag_results['avg_f1']:<12.4f}")
-    print("=" * 70)
+    print("=" * 80)
+    print(f"{'方法':<12} {'FActScore':<10} {'Hit@K':<10} {'F1':<10} {'Gen EM':<10} {'Ret EM':<10}")
+    print("-" * 80)
+    print(f"{'Vanilla RAG':<12} {vanilla_results['avg_factscore']:<10.4f} {vanilla_results['avg_hit_at_k']:<10.4f} {vanilla_results['avg_f1']:<10.4f} {vanilla_results['avg_gen_em']:<10.4f} {vanilla_results['avg_ret_em']:<10.4f}")
+    print(f"{'Self-RAG':<12} {self_rag_results['avg_factscore']:<10.4f} {self_rag_results['avg_hit_at_k']:<10.4f} {self_rag_results['avg_f1']:<10.4f} {self_rag_results['avg_gen_em']:<10.4f} {self_rag_results['avg_ret_em']:<10.4f}")
+    print("=" * 80)
     
     # 计算提升
-    factscore_improve = (self_rag_results['avg_factscore'] - vanilla_results['avg_factscore']) / vanilla_results['avg_factscore'] * 100 if vanilla_results['avg_factscore'] > 0 else 0
-    hit_improve = (self_rag_results['avg_hit_at_k'] - vanilla_results['avg_hit_at_k']) / vanilla_results['avg_hit_at_k'] * 100 if vanilla_results['avg_hit_at_k'] > 0 else 0
-    f1_improve = (self_rag_results['avg_f1'] - vanilla_results['avg_f1']) / vanilla_results['avg_f1'] * 100 if vanilla_results['avg_f1'] > 0 else 0
+    def _calc_improve(new_val, old_val):
+        return (new_val - old_val) / old_val * 100 if old_val > 0 else 0
+    
+    factscore_improve = _calc_improve(self_rag_results['avg_factscore'], vanilla_results['avg_factscore'])
+    hit_improve = _calc_improve(self_rag_results['avg_hit_at_k'], vanilla_results['avg_hit_at_k'])
+    f1_improve = _calc_improve(self_rag_results['avg_f1'], vanilla_results['avg_f1'])
+    gen_em_improve = _calc_improve(self_rag_results['avg_gen_em'], vanilla_results['avg_gen_em'])
+    ret_em_improve = _calc_improve(self_rag_results['avg_ret_em'], vanilla_results['avg_ret_em'])
     
     print(f"\n📊 Self-RAG vs Vanilla RAG 提升:")
     print(f"   FActScore: {'+' if factscore_improve >= 0 else ''}{factscore_improve:.2f}%")
     print(f"   Hit@K:     {'+' if hit_improve >= 0 else ''}{hit_improve:.2f}%")
     print(f"   F1 Score:  {'+' if f1_improve >= 0 else ''}{f1_improve:.2f}%")
+    print(f"   Gen EM:    {'+' if gen_em_improve >= 0 else ''}{gen_em_improve:.2f}%")
+    print(f"   Ret EM:    {'+' if ret_em_improve >= 0 else ''}{ret_em_improve:.2f}%")
     
     # 7. 保存结果
     os.makedirs(Config.RESULTS_DIR, exist_ok=True)
@@ -320,18 +374,24 @@ def run_comparison(
         "vanilla_rag": {
             "avg_factscore": vanilla_results['avg_factscore'],
             "avg_hit_at_k": vanilla_results['avg_hit_at_k'],
-            "avg_f1": vanilla_results['avg_f1']
+            "avg_f1": vanilla_results['avg_f1'],
+            "avg_gen_em": vanilla_results['avg_gen_em'],
+            "avg_ret_em": vanilla_results['avg_ret_em']
         },
         "self_rag": {
             "avg_factscore": self_rag_results['avg_factscore'],
             "avg_hit_at_k": self_rag_results['avg_hit_at_k'],
             "avg_f1": self_rag_results['avg_f1'],
+            "avg_gen_em": self_rag_results['avg_gen_em'],
+            "avg_ret_em": self_rag_results['avg_ret_em'],
             "support_rate": self_rag_results['support_rate']
         },
         "improvement": {
             "factscore": factscore_improve,
             "hit_at_k": hit_improve,
-            "f1": f1_improve
+            "f1": f1_improve,
+            "gen_em": gen_em_improve,
+            "ret_em": ret_em_improve
         },
         "vanilla_rag_details": vanilla_results['individual_results'][:10],  # 只保存前10个详细结果
         "self_rag_details": self_rag_results['individual_results'][:10]

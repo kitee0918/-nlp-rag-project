@@ -3,17 +3,21 @@
 支持 FActScore 评估和 Self-RAG 生成
 
 包含:
-1. FActScoreEvaluator - 原子事实准确性评估（使用 Qwen API）
-2. SelfRAGGenerator - Prompt-based Self-RAG 生成器
-3. HallucinationEvaluator - 整合幻觉评估流程
+1. 评估指标工具函数（复用自 helpers.py）
+2. FActScoreEvaluator - 原子事实准确性评估（API 版本）
+3. FActScoreLocalEvaluator - 原子事实准确性评估（本地模型版本）
+4. SelfRAGGenerator - Prompt-based Self-RAG 生成器
+5. HallucinationEvaluator - 整合幻觉评估流程
 """
 
 import os
 import sys
 import json
 import re
+import string
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
+from collections import Counter
 from tqdm import tqdm
 
 # 设置 UTF-8 编码
@@ -29,6 +33,8 @@ except ImportError:
 
 from openai import OpenAI
 import httpx
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
 
 # ============================================
@@ -44,9 +50,101 @@ class HallucinationConfig:
     
     # FActScore 配置
     MAX_ATOMS_PER_ANSWER = 10  # 每个答案最多拆分的原子事实数
+    MAX_CLAIMS_LOCAL = 3  # 本地模型版本的最大原子事实数
     
     # Self-RAG 配置
     SELF_RAG_MAX_ITERATIONS = 3  # 最大迭代次数
+    
+    # 本地模型配置（可选）
+    LOCAL_MODEL_PATH = None  # 如果为 None，则使用 API 版本
+
+
+# ============================================
+# 评估指标工具函数（复用自 helpers.py）
+# ============================================
+# 来源：外部参考代码 (helpers.py)
+# 说明：以下函数 normalise, retrieval_em, generation_em, generation_f1 复用自外部 helpers.py
+#       非本项目原创代码，仅作学习和研究使用
+# ============================================
+
+def normalise(text: str) -> str:
+    """文本标准化：小写化 + 移除标点 + 压缩空白
+    
+    来源：helpers.py (外部参考代码)
+    """
+    if not text:
+        return ""
+    text = text.lower()
+    text = text.translate(str.maketrans('', '', string.punctuation))
+    return ' '.join(text.split())
+
+
+def retrieval_em(retrieved_docs: List[Dict], gold_answers: List[str]) -> int:
+    """
+    检索精确匹配：检查检索文档是否包含标准答案
+    
+    来源：helpers.py (外部参考代码)
+    
+    Args:
+        retrieved_docs: 检索到的文档列表
+        gold_answers: 标准答案列表
+        
+    Returns:
+        1 如果任何检索文档包含答案，否则 0
+    """
+    for doc in retrieved_docs:
+        doc_text = doc.get('text', doc.get('page_content', ''))
+        doc_norm = normalise(doc_text)
+        for gold in gold_answers:
+            if normalise(gold) in doc_norm:
+                return 1
+    return 0
+
+
+def generation_em(prediction: str, gold_answers: List[str]) -> int:
+    """
+    生成精确匹配：检查生成的答案是否与标准答案完全匹配
+    
+    来源：helpers.py (外部参考代码)
+    
+    Args:
+        prediction: 生成的答案
+        gold_answers: 标准答案列表
+        
+    Returns:
+        1 如果完全匹配，否则 0
+    """
+    pred_norm = normalise(prediction)
+    return int(any(normalise(a) == pred_norm for a in gold_answers))
+
+
+def generation_f1(prediction: str, gold_answers: List[str]) -> float:
+    """
+    生成 F1 分数：计算预测和标准答案之间的 token-level F1
+    
+    来源：helpers.py (外部参考代码)
+    
+    Args:
+        prediction: 生成的答案
+        gold_answers: 标准答案列表
+        
+    Returns:
+        最佳 F1 分数
+    """
+    def _f1(pred: str, gold: str) -> float:
+        pred_tokens = normalise(pred).split()
+        gold_tokens = normalise(gold).split()
+        common = Counter(pred_tokens) & Counter(gold_tokens)
+        n_common = sum(common.values())
+        if n_common == 0:
+            return 0.0
+        precision = n_common / len(pred_tokens) if pred_tokens else 0.0
+        recall = n_common / len(gold_tokens) if gold_tokens else 0.0
+        if precision + recall == 0:
+            return 0.0
+        return 2 * precision * recall / (precision + recall)
+    
+    return max(_f1(prediction, a) for a in gold_answers) if gold_answers else 0.0
 
 
 # ============================================
@@ -311,6 +409,206 @@ class FActScoreEvaluator:
             "avg_factscore": sum(all_factscores) / len(all_factscores) if all_factscores else 0.0,
             "individual_factscores": all_factscores,
             "details": all_details
+        }
+
+
+# ============================================
+# FActScore 评估器 - 本地模型版本（复用 helpers.py）
+# ============================================
+
+class FActScoreLocalEvaluator:
+    """
+    FActScore 评估器 - 本地模型版本
+    
+    复用自 helpers.py 的 factscore_fast 实现
+    优势：无需 API 调用，更快更省钱
+    """
+    
+    def __init__(self, model_path: str = None, device: str = None):
+        """
+        初始化本地模型 FActScore 评估器
+        
+        Args:
+            model_path: 本地模型路径（如果为 None，需要后续设置）
+            device: 运行设备
+        """
+        self.model = None
+        self.tokenizer = None
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.model_path = model_path
+        
+        if model_path and os.path.exists(model_path):
+            self._load_model(model_path)
+    
+    
+    def _load_model(self, model_path: str):
+        """加载本地模型"""
+        print(f"加载本地模型: {model_path}")
+        
+        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            torch_dtype=torch.float16,
+            device_map="auto"
+        )
+        self.model.eval()
+        
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+        
+        print("✅ 本地模型加载完成")
+    
+    
+    def set_model(self, model, tokenizer):
+        """
+        直接设置模型（用于已加载的模型）
+        
+        Args:
+            model: 已加载的模型
+            tokenizer: 已加载的 tokenizer
+        """
+        self.model = model
+        self.tokenizer = tokenizer
+    
+    
+    def factscore_fast(
+        self, 
+        prediction: str, 
+        retrieved_docs: List[Dict],
+        max_claims: int = 3
+    ) -> Tuple[float, int]:
+        """
+        快速计算 FActScore（本地模型版本）
+        
+        复用自 helpers.py
+        
+        Args:
+            prediction: 生成的答案
+            retrieved_docs: 检索到的文档列表
+            max_claims: 最大原子事实数量
+            
+        Returns:
+            (factscore, num_claims)
+        """
+        if not prediction.strip() or not retrieved_docs:
+            return 0.0, 0
+        
+        if self.model is None or self.tokenizer is None:
+            raise ValueError("模型未加载，请先调用 _load_model 或 set_model")
+        
+        # Step 1: 分解原子事实
+        decompose_prompt = (
+            f'List up to {max_claims} short factual claims from this text.\n'
+            f'Output ONLY a numbered list.\n\nText: {prediction[:300]}\n\nClaims:\n1.'
+        )
+        
+        inputs = self.tokenizer(
+            decompose_prompt, 
+            return_tensors='pt',
+            truncation=True, 
+            max_length=512
+        ).to(self.model.device)
+        
+        with torch.no_grad():
+            out = self.model.generate(
+                **inputs, 
+                max_new_tokens=64,
+                do_sample=False, 
+                pad_token_id=self.tokenizer.eos_token_id
+            )
+        
+        
+        raw = self.tokenizer.decode(
+            out[0][inputs['input_ids'].shape[1]:],
+            skip_special_tokens=True
+        ).strip()
+        
+        # 解析原子事实
+        claims = []
+        for line in raw.split('\n'):
+            c = re.sub(r'^[\d]+[.)\s]+', '', line.strip())
+            if len(c) > 10:
+                claims.append(c)
+            if len(claims) >= max_claims:
+                break
+        
+        
+        if not claims:
+            claims = [prediction[:200]]
+        
+        # Step 2: 验证每个原子事实
+        context = '\n'.join([
+            f'[C{i+1}]: {doc.get("text", doc.get("page_content", ""))[:300]}'
+            for i, doc in enumerate(retrieved_docs)
+        ])
+        
+        supported = 0
+        for claim in claims:
+            verify_prompt = (
+                f'Context:\n{context}\n\n'
+                f'Is this claim supported by the context above?\n'
+                f'Claim: {claim}\nAnswer (yes/no):'
+            )
+            
+            inputs = self.tokenizer(
+                verify_prompt, 
+                return_tensors='pt',
+                truncation=True, 
+                max_length=1024
+            ).to(self.model.device)
+            
+            with torch.no_grad():
+                out = self.model.generate(
+                    **inputs, 
+                    max_new_tokens=5,
+                    do_sample=False, 
+                    pad_token_id=self.tokenizer.eos_token_id
+                )
+            
+            verdict = self.tokenizer.decode(
+                out[0][inputs['input_ids'].shape[1]:],
+                skip_special_tokens=True
+            ).strip().lower()
+            
+            if 'yes' in verdict or 'support' in verdict:
+                supported += 1
+        
+        
+        return supported / len(claims), len(claims)
+    
+    
+    def compute_factscore(
+        self, 
+        answer: str, 
+        evidence: str,
+        retrieved_docs: List[Dict] = None,
+        max_claims: int = 3,
+        verbose: bool = False
+    ) -> Dict:
+        """
+        计算 FActScore
+        
+        Args:
+            answer: 生成的答案
+            evidence: 证据文本（如果不提供 retrieved_docs，使用此作为证据）
+            retrieved_docs: 检索到的文档列表
+            max_claims: 最大原子事实数量
+            verbose: 是否打印详细信息
+            
+        Returns:
+            包含 FActScore 和详细信息的字典
+        """
+        # 如果没有提供检索文档，用 evidence 构造一个
+        if retrieved_docs is None:
+            retrieved_docs = [{"text": evidence}]
+        
+        factscore, num_claims = self.factscore_fast(answer, retrieved_docs, max_claims)
+        
+        return {
+            "factscore": factscore,
+            "num_atoms": num_claims,
+            "num_supported": int(factscore * num_claims),
+            "atoms": []  # 本地版本不返回详细的原子事实
         }
 
 
