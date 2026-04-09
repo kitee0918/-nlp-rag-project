@@ -803,13 +803,17 @@ class SelfRAGGenerator:
     4. [IsUSE] - 判断回答是否有用
     
     通过 Prompt 引导模型输出这些判断标记
+    支持云端 API 和本地模型两种模式
     """
     
     def __init__(
         self, 
         retriever,
+        generator_type: str = "api",
         api_key: str = None,
         model: str = None,
+        model_path: str = None,
+        device: str = None,
         max_iterations: int = 3
     ):
         """
@@ -817,34 +821,92 @@ class SelfRAGGenerator:
         
         Args:
             retriever: 检索器实例
-            api_key: DashScope API Key
-            model: Qwen 模型名称
+            generator_type: 生成器类型，"api" 或 "local"（向后兼容: "qwen"=api, "llama"=local）
+            api_key: DashScope API Key (仅 api 模式)
+            model: API 模型名称 (仅 api 模式)
+            model_path: 本地模型路径 (仅 local 模式)
+            device: 运行设备 (仅 local 模式)
             max_iterations: 最大迭代次数
         """
+        # 向后兼容映射
+        type_mapping = {"qwen": "api", "llama": "local"}
+        generator_type = type_mapping.get(generator_type.lower(), generator_type.lower())
+        
         self.retriever = retriever
+        self.generator_type = generator_type
         self.api_key = api_key or HallucinationConfig.DASHSCOPE_API_KEY
         self.model = model or HallucinationConfig.QWEN_MODEL
+        self.model_path = model_path
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.max_iterations = max_iterations
         
-        if not self.api_key:
-            raise ValueError("未找到 API Key，请设置 DASHSCOPE_API_KEY 环境变量")
-        
-        # 初始化 OpenAI 客户端
-        http_client = httpx.Client(timeout=httpx.Timeout(60.0, connect=10.0))
-        default_headers = {
-            "x-stainless-os": "Linux",
-            "x-stainless-arch": "x86_64",
-            "x-stainless-lang": "python",
-        }
-        
-        self.client = OpenAI(
-            api_key=self.api_key,
-            base_url=HallucinationConfig.DASHSCOPE_BASE_URL,
-            http_client=http_client,
-            default_headers=default_headers,
+        if generator_type == "local":
+            # 本地模式：加载本地模型
+            self._load_local_model(model_path)
+            print(f"Self-RAG 生成器初始化完成，使用本地模型: {model_path}")
+        else:
+            # API 模式
+            if not self.api_key:
+                raise ValueError("API 模式需要设置 DASHSCOPE_API_KEY")
+            
+            # 初始化 OpenAI 客户端
+            http_client = httpx.Client(timeout=httpx.Timeout(60.0, connect=10.0))
+            default_headers = {
+                "x-stainless-os": "Linux",
+                "x-stainless-arch": "x86_64",
+                "x-stainless-lang": "python",
+            }
+            
+            self.client = OpenAI(
+                api_key=self.api_key,
+                base_url=HallucinationConfig.DASHSCOPE_BASE_URL,
+                http_client=http_client,
+                default_headers=default_headers,
+            )
+            print(f"Self-RAG 生成器初始化完成，使用 API 模型: {self.model}")
+    
+    def _load_local_model(self, model_path: str):
+        """加载本地模型"""
+        print(f"加载本地模型: {model_path}")
+        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+        self.local_model = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            torch_dtype=torch.float16,
+            device_map="auto"
         )
-        
-        print(f"Self-RAG 生成器初始化完成，使用模型: {self.model}")
+        self.local_model.eval()
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+        print("本地模型加载完成")
+    
+    def _generate_local(self, prompt: str, max_new_tokens: int = 256, temperature: float = 0.7) -> str:
+        """使用本地模型生成"""
+        inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=2048).to(self.local_model.device)
+        with torch.no_grad():
+            outputs = self.local_model.generate(
+                **inputs,
+                max_new_tokens=max_new_tokens,
+                do_sample=True,
+                temperature=temperature,
+                pad_token_id=self.tokenizer.eos_token_id
+            )
+        return self.tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True).strip()
+    
+    def _call_api(self, messages: List[Dict], temperature: float = 0.7, max_tokens: int = 256) -> str:
+        """调用云端 API"""
+        if self.generator_type == "local":
+            # 使用本地模型
+            prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+            return self._generate_local(prompt, max_new_tokens=max_tokens, temperature=temperature)
+        else:
+            # 使用 API
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            return response.choices[0].message.content.strip()
     
     def _format_context(self, documents: List[Dict]) -> str:
         """格式化检索到的文档"""
@@ -873,8 +935,7 @@ class SelfRAGGenerator:
 判断："""
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            result = self._call_api(
                 messages=[
                     {"role": "system", "content": "你是一个判断助手。"},
                     {"role": "user", "content": prompt}
@@ -882,8 +943,6 @@ class SelfRAGGenerator:
                 temperature=0.1,
                 max_tokens=32
             )
-            
-            result = response.choices[0].message.content.strip()
             return "需要检索" in result
             
         except Exception as e:
@@ -912,8 +971,7 @@ class SelfRAGGenerator:
 相关文档编号："""
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            result = self._call_api(
                 messages=[
                     {"role": "system", "content": "你是一个相关性判断助手。"},
                     {"role": "user", "content": prompt}
@@ -921,8 +979,6 @@ class SelfRAGGenerator:
                 temperature=0.1,
                 max_tokens=32
             )
-            
-            result = response.choices[0].message.content.strip()
             
             if "无" in result or "不相关" in result:
                 return False, []
@@ -973,8 +1029,7 @@ class SelfRAGGenerator:
 判断："""
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            result = self._call_api(
                 messages=[
                     {"role": "system", "content": "你是一个事实核查助手。"},
                     {"role": "user", "content": prompt}
@@ -982,8 +1037,6 @@ class SelfRAGGenerator:
                 temperature=0.1,
                 max_tokens=128
             )
-            
-            result = response.choices[0].message.content.strip()
             
             if "充分支持" in result:
                 return True, result
@@ -1041,8 +1094,7 @@ class SelfRAGGenerator:
 
 请给出简洁准确的回答："""
                 
-                response = self.client.chat.completions.create(
-                    model=self.model,
+                answer = self._call_api(
                     messages=[
                         {"role": "system", "content": "你是一个智能问答助手。"},
                         {"role": "user", "content": prompt}
@@ -1050,8 +1102,6 @@ class SelfRAGGenerator:
                     temperature=0.7,
                     max_tokens=256
                 )
-                
-                answer = response.choices[0].message.content.strip()
                 
                 return {
                     "answer": answer,
@@ -1102,8 +1152,7 @@ class SelfRAGGenerator:
 
 请给出简洁准确的回答："""
             
-            response = self.client.chat.completions.create(
-                model=self.model,
+            answer = self._call_api(
                 messages=[
                     {"role": "system", "content": "你是一个智能问答助手，擅长根据提供的文档信息回答问题。"},
                     {"role": "user", "content": prompt}
@@ -1111,8 +1160,6 @@ class SelfRAGGenerator:
                 temperature=0.7,
                 max_tokens=256
             )
-            
-            answer = response.choices[0].message.content.strip()
             
             # Step 5: 判断答案是否被支持
             is_supported, support_reason = self._check_support(question, answer, relevant_docs)
@@ -1178,30 +1225,58 @@ class HallucinationEvaluator:
     def __init__(
         self,
         retriever,
+        generator_type: str = "api",
         api_key: str = None,
-        model: str = None
+        model: str = None,
+        model_path: str = None,
+        device: str = None
     ):
         """
         初始化幻觉评估器
         
         Args:
             retriever: 检索器实例
-            api_key: DashScope API Key
-            model: Qwen 模型名称
+            generator_type: 生成器类型，"api" 或 "local"（向后兼容: "qwen"=api, "llama"=local）
+            api_key: DashScope API Key (仅 api 模式)
+            model: API 模型名称 (仅 api 模式)
+            model_path: 本地模型路径 (仅 local 模式)
+            device: 运行设备 (仅 local 模式)
         """
+        # 向后兼容映射
+        type_mapping = {"qwen": "api", "llama": "local"}
+        generator_type = type_mapping.get(generator_type.lower(), generator_type.lower())
+        
         self.retriever = retriever
+        self.generator_type = generator_type
         self.api_key = api_key or HallucinationConfig.DASHSCOPE_API_KEY
         self.model = model or HallucinationConfig.QWEN_MODEL
+        self.model_path = model_path
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         
         # 初始化组件
-        self.factscore_evaluator = FActScoreEvaluator(api_key=self.api_key, model=self.model)
-        self.self_rag_generator = SelfRAGGenerator(
-            retriever=retriever,
-            api_key=self.api_key,
-            model=self.model
-        )
+        if generator_type == "local":
+            # 本地模式
+            self.factscore_evaluator = FActScoreLocalEvaluator(
+                model_path=model_path,
+                device=self.device
+            )
+            self.factscore_evaluator._load_model(model_path)
+            self.self_rag_generator = SelfRAGGenerator(
+                retriever=retriever,
+                generator_type="local",
+                model_path=model_path,
+                device=self.device
+            )
+        else:
+            # API 模式
+            self.factscore_evaluator = FActScoreEvaluator(api_key=self.api_key, model=self.model)
+            self.self_rag_generator = SelfRAGGenerator(
+                retriever=retriever,
+                api_key=self.api_key,
+                model=self.model
+            )
         
-        print(f"幻觉评估器初始化完成")
+        print(f"幻觉评估器初始化完成 (generator_type={generator_type})")
     
     def evaluate_single(
         self,

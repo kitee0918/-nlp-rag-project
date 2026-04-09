@@ -45,6 +45,7 @@ from rag_finance import (
     BM25Retriever,
     ContrieverRetriever,
     QwenGenerator,
+    LlamaGenerator,
     RAGSystem,
     compute_f1,
     compute_retrieval_metrics,
@@ -63,6 +64,12 @@ from hallucination_eval import (
     generation_em,
     generation_f1
 )
+
+# 向后兼容映射
+GENERATOR_TYPE_MAPPING = {
+    "qwen": "api",
+    "llama": "local"
+}
 
 
 # ============================================
@@ -225,7 +232,9 @@ def run_comparison(
     subset_size: int = 20,
     top_k: int = 3,
     retriever_type: str = "bm25",
+    generator_type: str = "api",
     model: str = "qwen-plus",
+    model_path: str = None,
     api_key: str = None,
     device: str = None,
     verbose: bool = False
@@ -237,7 +246,9 @@ def run_comparison(
         subset_size: 测试样本数量
         top_k: 检索文档数量
         retriever_type: 检索器类型 ("bm25" 或 "contriever")
-        model: Qwen 模型名称
+        generator_type: 生成器类型，"api" 或 "local"（向后兼容: "qwen"=api, "llama"=local）
+        model: API 模型名称，默认 "qwen-plus" (仅 generator_type="api" 时有效)
+        model_path: 本地模型路径 (仅 generator_type="local" 时有效)
         api_key: DashScope API Key
         device: 运行设备
         verbose: 是否打印详细信息
@@ -245,6 +256,9 @@ def run_comparison(
     Returns:
         对比结果
     """
+    # 向后兼容映射
+    generator_type = GENERATOR_TYPE_MAPPING.get(generator_type.lower(), generator_type.lower())
+    
     # 设置 API Key
     if api_key:
         os.environ['DASHSCOPE_API_KEY'] = api_key
@@ -259,7 +273,11 @@ def run_comparison(
     print(f"测试样本: {subset_size}")
     print(f"Top-K: {top_k}")
     print(f"检索器: {retriever_type.upper()}")
-    print(f"生成模型: {model}")
+    print(f"生成器类型: {generator_type.upper()}")
+    if generator_type == "api":
+        print(f"生成模型: {model}")
+    else:
+        print(f"模型路径: {model_path or Config.LLAMA_MODEL_PATH}")
     print(f"设备: {device}")
     print("=" * 70)
     
@@ -287,15 +305,29 @@ def run_comparison(
     print("\n🤖 初始化评估组件...")
     
     # Vanilla RAG 生成器
-    vanilla_generator = QwenGenerator(model=model)
-    
-    # FActScore 评估器
-    factscore_evaluator = FActScoreEvaluator(model=model)
+    if generator_type == "local":
+        vanilla_generator = LlamaGenerator(
+            model_path=model_path or Config.LLAMA_MODEL_PATH,
+            device=device
+        )
+        # 本地模型使用 FActScoreLocalEvaluator
+        factscore_evaluator = FActScoreLocalEvaluator(
+            model_path=model_path or Config.LLAMA_MODEL_PATH,
+            device=device
+        )
+        # 加载本地模型
+        factscore_evaluator._load_model(model_path or Config.LLAMA_MODEL_PATH)
+    else:
+        vanilla_generator = QwenGenerator(model=model)
+        factscore_evaluator = FActScoreEvaluator(model=model)
     
     # Self-RAG 幻觉评估器
     hallucination_evaluator = HallucinationEvaluator(
         retriever=retriever,
-        model=model
+        generator_type=generator_type,
+        model=model,
+        model_path=model_path,
+        device=device
     )
     
     # 4. 评估 Vanilla RAG
