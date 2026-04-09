@@ -1038,6 +1038,8 @@ def main():
                         help="Llama 模型路径 (仅当 --generator-type=llama 时有效)")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",
                         help="运行设备")
+    parser.add_argument("--quantize", type=str, default="8bit", choices=["4bit", "8bit", "fp16"],
+                        help="量化方式: 4bit (最省显存), 8bit (默认平衡), fp16 (无量化)")
     
     # 使用 parse_known_args() 以兼容 Jupyter/Colab 环境
     args, _ = parser.parse_known_args()
@@ -1053,6 +1055,7 @@ def main():
         print(f"生成模型: {args.model}")
     else:
         print(f"模型路径: {args.llama_model_path}")
+        print(f"量化方式: {args.quantize}")
     print(f"设备: {args.device}")
     print("=" * 60)
     
@@ -1080,9 +1083,14 @@ def main():
     
     # 3. 初始化生成器
     if args.generator_type == "llama":
+        # 解析量化参数
+        load_in_4bit = (args.quantize == "4bit")
+        load_in_8bit = (args.quantize == "8bit")
         generator = LlamaGenerator(
             model_path=args.llama_model_path,
-            device=args.device
+            device=args.device,
+            load_in_4bit=load_in_4bit,
+            load_in_8bit=load_in_8bit
         )
     else:
         generator = QwenGenerator(model=args.model)
