@@ -141,7 +141,7 @@ def evaluate_vanilla_rag(
             "gen_em": gen_em,
             "ret_em": ret_em,
             "num_atoms": factscore_result['num_atoms'],
-            "num_supported_atoms": factscore_result['num_supported_atoms']
+            "num_supported_atoms": factscore_result['num_supported']  # 注意: hallucination_eval 返回的是 num_supported
         })
     
     return {
