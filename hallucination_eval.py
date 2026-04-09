@@ -3,11 +3,36 @@
 支持 FActScore 评估和 Self-RAG 生成
 
 包含:
-1. 评估指标工具函数（复用自 helpers.py）
+1. 评估指标工具函数（复用自 helpers.py 和 eval(1).py）
+   - helpers.py: normalise, retrieval_em, recall_at_k, generation_em, generation_f1
+   - eval(1).py: hallucination_rate, factscore_simple, citation_metrics, hit_rate, evaluate_all_metrics
 2. FActScoreEvaluator - 原子事实准确性评估（API 版本）
 3. FActScoreLocalEvaluator - 原子事实准确性评估（本地模型版本）
 4. SelfRAGGenerator - Prompt-based Self-RAG 生成器
 5. HallucinationEvaluator - 整合幻觉评估流程
+
+================================================================================
+知识产权声明
+================================================================================
+本模块中的以下代码复用自外部参考代码，非本项目原创，仅作学习和研究使用：
+
+1. helpers.py (others/helpers.py)
+   - normalise(): 文本标准化函数
+   - retrieval_em(): 检索精确匹配
+   - generation_em(): 生成精确匹配
+   - generation_f1(): 生成 F1 分数
+
+2. eval(1).py (others/eval(1).py)
+   - split_claims(): 声明分割
+   - is_supported_text(): 字符串匹配验证
+   - hallucination_rate(): 幻觉率计算
+   - factscore_simple(): 简化版 FActScore
+   - citation_metrics(): 引用质量评估
+   - hit_rate(): 命中率
+   - evaluate_all_metrics(): 综合评估入口
+
+以上外部代码来源仅用于学术研究目的。
+================================================================================
 """
 
 import os
@@ -60,11 +85,10 @@ class HallucinationConfig:
 
 
 # ============================================
-# 评估指标工具函数（复用自 helpers.py）
+# 评估指标工具函数（复用自 helpers.py 和 eval(1).py）
 # ============================================
-# 来源：外部参考代码 (helpers.py)
-# 说明：以下函数 normalise, retrieval_em, generation_em, generation_f1 复用自外部 helpers.py
-#       非本项目原创代码，仅作学习和研究使用
+# 来源：外部参考代码 (helpers.py + eval(1).py)
+# 说明：以下函数复用自外部代码，非本项目原创，仅作学习和研究使用
 # ============================================
 
 def normalise(text: str) -> str:
@@ -99,6 +123,27 @@ def retrieval_em(retrieved_docs: List[Dict], gold_answers: List[str]) -> int:
             if normalise(gold) in doc_norm:
                 return 1
     return 0
+
+
+def recall_at_k(retrieved_docs: List[Dict], gold_answer_text: str) -> float:
+    """
+    Recall@K：检查检索文档是否包含标准答案
+    
+    来源：helpers.py (外部参考代码)
+    
+    Args:
+        retrieved_docs: 检索到的文档列表
+        gold_answer_text: 标准答案文本
+        
+    Returns:
+        1.0 如果任何检索文档包含答案，否则 0.0
+    """
+    gold_norm = normalise(gold_answer_text)
+    for doc in retrieved_docs:
+        doc_text = doc.get('text', doc.get('page_content', ''))
+        if gold_norm in normalise(doc_text):
+            return 1.0
+    return 0.0
 
 
 def generation_em(prediction: str, gold_answers: List[str]) -> int:
@@ -145,6 +190,137 @@ def generation_f1(prediction: str, gold_answers: List[str]) -> float:
         return 2 * precision * recall / (precision + recall)
     
     return max(_f1(prediction, a) for a in gold_answers) if gold_answers else 0.0
+
+
+# ============================================
+# 幻觉评估指标（复用自 eval(1).py）
+# ============================================
+# 来源：外部参考代码 (eval(1).py)
+# 说明：以下函数复用自外部 eval(1).py，非本项目原创代码
+# ============================================
+
+def split_claims(text: str) -> List[str]:
+    """将文本按句子分割为声明列表（来源：eval(1).py）"""
+    if not text:
+        return []
+    sents = re.split(r"[。.!?;]", text)
+    return [s.strip() for s in sents if s.strip()]
+
+
+def is_supported_text(claim: str, documents: List[str]) -> bool:
+    """检查声明是否被文档支持（来源：eval(1).py）"""
+    claim_norm = normalise(claim)
+    for doc in documents:
+        if claim_norm in normalise(doc):
+            return True
+    return False
+
+
+def hallucination_rate(prediction: str, documents: List[str]) -> float:
+    """
+    幻觉率：不支持的声明占总声明的比例（来源：eval(1).py）
+    幻觉率 = 不支持的声明数 / 总声明数
+    Returns: 幻觉率 (0-1)，越高表示幻觉越严重
+    """
+    if not prediction or not documents:
+        return 0.0
+    claims = split_claims(prediction)
+    if not claims:
+        return 0.0
+    bad_claims = sum(1 for c in claims if not is_supported_text(c, documents))
+    return bad_claims / len(claims)
+
+
+def factscore_simple(prediction: str, documents: List[str]) -> float:
+    """
+    简化版 FActScore：支持的声明占总声明的比例（来源：eval(1).py）
+    FActScore = 支持的声明数 / 总声明数
+    Returns: FActScore (0-1)，越高越好
+    """
+    if not prediction or not documents:
+        return 0.0
+    claims = split_claims(prediction)
+    if not claims:
+        return 0.0
+    supported = sum(1 for c in claims if is_supported_text(c, documents))
+    return supported / len(claims)
+
+
+def citation_metrics(pred_docs: List[Dict], gold_answers: List[str]) -> Tuple[float, float]:
+    """
+    引用质量评估：计算 Precision 和 Recall（来源：eval(1).py）
+    Returns: (citation_precision, citation_recall)
+    """
+    if not pred_docs or not gold_answers:
+        return 0.0, 0.0
+    
+    # Precision: 检索到的文档有多少包含答案
+    useful = 0
+    for doc in pred_docs:
+        doc_text = doc.get('text', doc.get('page_content', ''))
+        for answer in gold_answers:
+            if normalise(answer) in normalise(doc_text):
+                useful += 1
+                break
+    precision = useful / len(pred_docs)
+    
+    # Recall: 标准答案有多少被检索文档覆盖
+    hit = 0
+    for answer in gold_answers:
+        for doc in pred_docs:
+            doc_text = doc.get('text', doc.get('page_content', ''))
+            if normalise(answer) in normalise(doc_text):
+                hit += 1
+                break
+    recall = hit / len(gold_answers)
+    
+    return precision, recall
+
+
+def hit_rate(prediction: str, gold_answers: List[str]) -> int:
+    """命中率：预测答案是否包含标准答案（来源：eval(1).py）"""
+    if not prediction or not gold_answers:
+        return 0
+    pred_norm = normalise(prediction)
+    for gold in gold_answers:
+        gold_norm = normalise(gold)
+        if gold_norm in pred_norm or pred_norm in gold_norm:
+            return 1
+    return 0
+
+
+def evaluate_all_metrics(
+    prediction: str,
+    pred_docs: List[Dict],
+    gold_answers: List[str],
+    documents: List[str] = None
+) -> Dict:
+    """
+    综合评估：一次调用计算所有指标
+    整合来自 helpers.py 和 eval(1).py 的评估方法
+    """
+    results = {}
+    
+    # 生成质量指标
+    results['generation_em'] = generation_em(prediction, gold_answers)
+    results['generation_f1'] = generation_f1(prediction, gold_answers)
+    results['hit_rate'] = hit_rate(prediction, gold_answers)
+    
+    # 检索质量指标
+    results['retrieval_em'] = retrieval_em(pred_docs, gold_answers)
+    cp, cr = citation_metrics(pred_docs, gold_answers)
+    results['citation_precision'] = cp
+    results['citation_recall'] = cr
+    
+    # 幻觉评估指标
+    if documents:
+        doc_texts = documents
+    else:
+        doc_texts = [doc.get('text', doc.get('page_content', '')) for doc in pred_docs]
+    results['hallucination_rate'] = hallucination_rate(prediction, doc_texts)
+    results['factscore_simple'] = factscore_simple(prediction, doc_texts)
+    
+    return results
 
 
 # ============================================
