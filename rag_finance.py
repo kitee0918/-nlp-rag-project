@@ -890,7 +890,7 @@ Please provide a concise and accurate answer:"""
 # ============================================
 
 def create_generator(
-    generator_type: str = "qwen",
+    generator_type: str = "api",
     model: str = None,
     api_key: str = None,
     model_path: str = None,
@@ -901,29 +901,39 @@ def create_generator(
     创建生成器的工厂函数
     
     Args:
-        generator_type: 生成器类型 ("qwen" 或 "llama")
-        model: Qwen 模型名称 (仅 qwen 类型)
-        api_key: DashScope API Key (仅 qwen 类型)
-        model_path: Llama 模型路径 (仅 llama 类型)
-        device: 运行设备 (仅 llama 类型)
+        generator_type: 生成器类型，按部署方式区分
+            - "api": 使用云端 API（阿里百炼 Qwen）
+            - "local": 使用本地 HuggingFace 模型（支持 Qwen/Llama 等）
+            - 向后兼容: "qwen" 等同于 "api", "llama" 等同于 "local"
+        model: API 模型名称，默认 "qwen-plus" (仅 api 类型)
+        api_key: DashScope API Key (仅 api 类型)
+        model_path: 本地模型路径 (仅 local 类型)
+        device: 运行设备 (仅 local 类型)
         
     Returns:
         生成器实例
     """
     generator_type = generator_type.lower()
     
-    if generator_type == "qwen":
+    # 向后兼容映射
+    type_mapping = {
+        "qwen": "api",
+        "llama": "local"
+    }
+    generator_type = type_mapping.get(generator_type, generator_type)
+    
+    if generator_type == "api":
         return QwenGenerator(
             api_key=api_key,
             model=model or Config.QWEN_MODEL
         )
-    elif generator_type == "llama":
+    elif generator_type == "local":
         return LlamaGenerator(
             model_path=model_path,
             device=device
         )
     else:
-        raise ValueError(f"不支持的生成器类型: {generator_type}. 可选: qwen, llama")
+        raise ValueError(f"不支持的生成器类型: {generator_type}. 可选: api, local")
 
 
 # ============================================
@@ -1129,12 +1139,12 @@ def main():
                         help="测试样本数量")
     parser.add_argument("--top_k", type=int, default=Config.RETRIEVAL_K,
                         help="检索文档数量")
-    parser.add_argument("--generator-type", type=str, default="qwen", choices=["qwen", "llama"],
-                        help="生成器类型: qwen (API) 或 llama (本地)")
+    parser.add_argument("--generator-type", type=str, default="api", choices=["api", "local", "qwen", "llama"],
+                        help="生成器类型: api (云端API) 或 local (本地模型)。向后兼容: qwen=api, llama=local")
     parser.add_argument("--model", type=str, default="qwen-plus",
-                        help="Qwen 模型名称 (仅当 --generator-type=qwen 时有效)")
-    parser.add_argument("--llama-model-path", type=str, default=Config.LLAMA_MODEL_PATH,
-                        help="Llama 模型路径 (仅当 --generator-type=llama 时有效)")
+                        help="API 模型名称 (仅当 --generator-type=api 时有效)")
+    parser.add_argument("--model-path", type=str, default=Config.LLAMA_MODEL_PATH,
+                        help="本地模型路径 (仅当 --generator-type=local 时有效)")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",
                         help="运行设备")
     
@@ -1148,10 +1158,15 @@ def main():
     print(f"测试样本: {args.subset}")
     print(f"Top-K: {args.top_k}")
     print(f"生成器类型: {args.generator_type}")
-    if args.generator_type == "qwen":
+    # 向后兼容
+    gen_type = args.generator_type.lower()
+    type_mapping = {"qwen": "api", "llama": "local"}
+    gen_type = type_mapping.get(gen_type, gen_type)
+    
+    if gen_type == "api":
         print(f"生成模型: {args.model}")
     else:
-        print(f"模型路径: {args.llama_model_path}")
+        print(f"模型路径: {args.model_path}")
     print(f"设备: {args.device}")
     print("=" * 60)
     
@@ -1178,9 +1193,9 @@ def main():
         )
     
     # 3. 初始化生成器
-    if args.generator_type == "llama":
+    if gen_type == "local":
         generator = LlamaGenerator(
-            model_path=args.llama_model_path,
+            model_path=args.model_path,
             device=args.device
         )
     else:
@@ -1244,41 +1259,45 @@ def run_comparison_experiment(
     api_key: str = None,
     device: str = None,
     use_retrievers: List[str] = None,
-    generator_type: str = "qwen",
-    llama_model_path: str = None
+    generator_type: str = "api",
+    model_path: str = None
 ) -> Dict:
     """
     Colab 专用函数：运行 BM25 vs Contriever 对比实验 (FinanceBench)
     
     在 Colab 中直接调用：
-        # 使用 Qwen (API)
+        # 使用云端 API
         from rag_finance import run_comparison_experiment
         results = run_comparison_experiment(api_key="sk-xxx")
         
-        # 使用本地 Llama 模型
+        # 使用本地模型（如 Qwen2.5-7B-Instruct）
         results = run_comparison_experiment(
-            generator_type="llama",
-            llama_model_path="/content/models/llama-3.1-8b"
+            generator_type="local",
+            model_path="/content/models/Qwen2.5-7B-Instruct"
         )
         
         # 快速调试：只用 BM25（跳过 Contriever 模型下载）
-        results = run_comparison_experiment(api_key="sk-xxx", use_retrievers=["bm25"])
+        results = run_comparison_experiment(use_retrievers=["bm25"])
     
     Args:
         subset_size: 测试样本数量，默认 50
         top_k: 检索文档数量，默认 3
-        model: Qwen 模型名称，默认 "qwen-plus" (仅当 generator_type="qwen" 时有效)
+        model: API 模型名称，默认 "qwen-plus" (仅当 generator_type="api" 时有效)
         api_key: DashScope API Key（如未提供，从环境变量读取）
         device: 运行设备（默认自动检测）
         use_retrievers: 要使用的检索器列表，可选 ["bm25", "contriever"]，默认两者都用
-        generator_type: 生成器类型，"qwen" 或 "llama"
-        llama_model_path: Llama 模型路径 (仅当 generator_type="llama" 时有效)
+        generator_type: 生成器类型，"api" 或 "local"（向后兼容: "qwen"=api, "llama"=local）
+        model_path: 本地模型路径 (仅当 generator_type="local" 时有效)
         
     Returns:
         包含检索器评估结果的字典
     """
-    # 设置 API Key (仅 Qwen 需要)
-    if api_key and generator_type == "qwen":
+    # 向后兼容映射
+    type_mapping = {"qwen": "api", "llama": "local"}
+    generator_type = type_mapping.get(generator_type.lower(), generator_type.lower())
+    
+    # 设置 API Key (仅 API 模式需要)
+    if api_key and generator_type == "api":
         os.environ['DASHSCOPE_API_KEY'] = api_key
     
     # 检测设备
@@ -1291,10 +1310,10 @@ def run_comparison_experiment(
     print(f"测试样本: {subset_size}")
     print(f"Top-K: {top_k}")
     print(f"生成器类型: {generator_type.upper()}")
-    if generator_type == "qwen":
+    if generator_type == "api":
         print(f"生成模型: {model}")
     else:
-        print(f"模型路径: {llama_model_path or Config.LLAMA_MODEL_PATH}")
+        print(f"模型路径: {model_path or Config.LLAMA_MODEL_PATH}")
     print(f"设备: {device}")
     print("=" * 70)
     
@@ -1337,9 +1356,9 @@ def run_comparison_experiment(
     
     # 3. 初始化生成器
     print(f"\n🤖 初始化生成器: {generator_type.upper()}")
-    if generator_type.lower() == "llama":
+    if generator_type == "local":
         generator = LlamaGenerator(
-            model_path=llama_model_path,
+            model_path=model_path,
             device=device
         )
     else:
