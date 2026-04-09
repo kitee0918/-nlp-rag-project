@@ -800,6 +800,216 @@ Please provide a concise and accurate answer:"""
 
 
 # ============================================
+# 本地 Qwen 模型生成器
+# ============================================
+
+class LocalQwenGenerator:
+    """本地 Qwen 模型生成器 - 直接加载模型权重"""
+    
+    def __init__(
+        self, 
+        model_path: str = "Qwen/Qwen2.5-7B-Instruct",
+        device: str = None,
+        load_in_8bit: bool = True,
+        load_in_4bit: bool = False
+    ):
+        """
+        初始化本地 Qwen 生成器
+        
+        Args:
+            model_path: 模型路径或 HuggingFace ID（如 "Qwen/Qwen2.5-7B-Instruct"）
+            device: 运行设备
+            load_in_8bit: 是否使用 8bit 量化
+            load_in_4bit: 是否使用 4bit 量化（更省显存）
+        """
+        self.model_path = model_path
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        
+        print(f"正在加载 Qwen 模型: {model_path}")
+        print(f"设备: {self.device}")
+        
+        from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+        
+        # 加载 tokenizer
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            model_path,
+            trust_remote_code=True
+        )
+        
+        # 设置 pad_token
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+        
+        # 量化配置
+        quantization_config = None
+        if load_in_4bit:
+            from transformers import BitsAndBytesConfig
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_quant_type="nf4",
+                llm_int8_enable_fp32_cpu_offload=True
+            )
+            print("使用 4bit 量化")
+        elif load_in_8bit:
+            from transformers import BitsAndBytesConfig
+            quantization_config = BitsAndBytesConfig(
+                load_in_8bit=True,
+                llm_int8_enable_fp32_cpu_offload=True
+            )
+            print("使用 8bit 量化")
+        else:
+            print("使用全精度 (FP16)")
+        
+        # 加载模型
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            dtype=torch.float16,
+            device_map="auto" if self.device == "cuda" else None,
+            quantization_config=quantization_config,
+            trust_remote_code=True
+        )
+        
+        if self.device == "cpu":
+            self.model = self.model.to(self.device)
+        
+        self.model.eval()
+        
+        # 创建 pipeline
+        self.pipe = pipeline(
+            "text-generation",
+            model=self.model,
+            tokenizer=self.tokenizer,
+            dtype=torch.float16,
+            device_map="auto" if self.device == "cuda" else None
+        )
+        
+        print(f"Qwen 模型加载完成！")
+        
+        # 保存模型名称用于显示
+        model_name = model_path.split("/")[-1] if "/" in model_path else model_path
+        self.model_name = model_name
+    
+    def format_context(self, documents: List[Dict]) -> str:
+        """格式化检索到的文档"""
+        context_parts = []
+        for i, doc in enumerate(documents, 1):
+            title = doc.get('title', 'Unknown')
+            context_parts.append(f"[文档 {i}] {title}\n{doc['text']}\n")
+        return "\n".join(context_parts)
+    
+    def generate(self, question: str, documents: List[Dict]) -> Dict:
+        """
+        根据问题和检索文档生成答案
+        
+        Args:
+            question: 问题
+            documents: 检索到的文档列表
+            
+        Returns:
+            生成结果字典
+        """
+        context = self.format_context(documents)
+        
+        # Qwen 的 prompt 格式
+        prompt = f"""你是一个智能问答助手。请根据以下提供的文档信息回答问题。
+如果文档中没有足够的信息回答问题，请说"根据提供的文档，我无法回答这个问题"。
+
+文档信息:
+{context}
+
+问题: {question}
+
+请给出简洁准确的回答:"""
+        
+        try:
+            # 使用 Qwen 的对话格式
+            messages = [
+                {"role": "system", "content": "你是一个智能问答助手，擅长根据提供的文档信息回答问题。"},
+                {"role": "user", "content": prompt}
+            ]
+            
+            # 应用聊天模板
+            input_ids = self.tokenizer.apply_chat_template(
+                messages,
+                add_generation_prompt=True,
+                return_tensors="pt"
+            )
+            
+            # 处理返回值
+            if isinstance(input_ids, torch.Tensor):
+                input_tensor = input_ids
+                attention_mask = None
+            elif isinstance(input_ids, dict) or hasattr(input_ids, 'input_ids'):
+                input_tensor = input_ids['input_ids']
+                attention_mask = input_ids.get('attention_mask', None)
+            else:
+                raise TypeError(f"apply_chat_template 返回了意外类型: {type(input_ids)}")
+            
+            # 获取模型设备
+            try:
+                device = self.model.device
+            except AttributeError:
+                device = next(self.model.parameters()).device
+            
+            # 移动到正确设备
+            input_tensor = input_tensor.to(device)
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(device)
+            
+            # 生成
+            with torch.no_grad():
+                if attention_mask is not None:
+                    outputs = self.model.generate(
+                        input_tensor,
+                        attention_mask=attention_mask,
+                        max_new_tokens=256,
+                        do_sample=True,
+                        temperature=0.7,
+                        top_p=0.9,
+                        pad_token_id=self.tokenizer.eos_token_id
+                    )
+                else:
+                    outputs = self.model.generate(
+                        input_tensor,
+                        max_new_tokens=256,
+                        do_sample=True,
+                        temperature=0.7,
+                        top_p=0.9,
+                        pad_token_id=self.tokenizer.eos_token_id
+                    )
+            
+            # 解码
+            generated_text = self.tokenizer.decode(
+                outputs[0][input_tensor.shape[-1]:],
+                skip_special_tokens=True
+            )
+            
+            return {
+                "answer": generated_text.strip(),
+                "prompt": prompt,
+                "model": self.model_name
+            }
+            
+        except Exception as e:
+            error_msg = str(e)
+            error_type = type(e).__name__
+            print(f"\n生成错误 [{error_type}]: {error_msg}")
+            
+            return {
+                "answer": "",
+                "prompt": prompt,
+                "model": self.model_name,
+                "error": error_msg,
+                "error_type": error_type
+            }
+    
+    def get_name(self) -> str:
+        return self.model_name
+
+
+# ============================================
 # 通用 LLM 生成器工厂
 # ============================================
 
@@ -809,17 +1019,21 @@ def create_generator(
     api_key: str = None,
     model_path: str = None,
     device: str = None,
+    load_in_4bit: bool = False,
+    load_in_8bit: bool = True,
     **kwargs
 ):
     """
     创建生成器的工厂函数
     
     Args:
-        generator_type: 生成器类型 ("qwen" 或 "llama")
-        model: Qwen 模型名称 (仅 qwen 类型)
+        generator_type: 生成器类型 ("qwen", "llama", "local_qwen")
+        model: Qwen API 模型名称 (仅 qwen 类型)
         api_key: DashScope API Key (仅 qwen 类型)
-        model_path: Llama 模型路径 (仅 llama 类型)
-        device: 运行设备 (仅 llama 类型)
+        model_path: 本地模型路径 (仅 llama/local_qwen 类型)
+        device: 运行设备 (仅本地模型)
+        load_in_4bit: 是否使用 4bit 量化
+        load_in_8bit: 是否使用 8bit 量化
         
     Returns:
         生成器实例
@@ -834,10 +1048,19 @@ def create_generator(
     elif generator_type == "llama":
         return LlamaGenerator(
             model_path=model_path,
-            device=device
+            device=device,
+            load_in_4bit=load_in_4bit,
+            load_in_8bit=load_in_8bit
+        )
+    elif generator_type == "local_qwen":
+        return LocalQwenGenerator(
+            model_path=model_path or "Qwen/Qwen2.5-7B-Instruct",
+            device=device,
+            load_in_4bit=load_in_4bit,
+            load_in_8bit=load_in_8bit
         )
     else:
-        raise ValueError(f"不支持的生成器类型: {generator_type}. 可选: qwen, llama")
+        raise ValueError(f"不支持的生成器类型: {generator_type}. 可选: qwen, llama, local_qwen")
 
 
 # ============================================
@@ -1032,8 +1255,8 @@ def main():
                         help="测试样本数量")
     parser.add_argument("--top_k", type=int, default=Config.RETRIEVAL_K,
                         help="检索文档数量")
-    parser.add_argument("--generator-type", type=str, default="qwen", choices=["qwen", "llama"],
-                        help="生成器类型: qwen (API) 或 llama (本地)")
+    parser.add_argument("--generator-type", type=str, default="qwen", choices=["qwen", "llama", "local_qwen"],
+                        help="生成器类型: qwen (API), llama (本地), local_qwen (本地Qwen模型)")
     parser.add_argument("--model", type=str, default="qwen-plus",
                         help="Qwen 模型名称 (仅当 --generator-type=qwen 时有效)")
     parser.add_argument("--llama-model-path", type=str, default=Config.LLAMA_MODEL_PATH,
@@ -1088,17 +1311,30 @@ def main():
         # 解析量化参数
         load_in_4bit = (args.quantize == "4bit")
         load_in_8bit = (args.quantize == "8bit")
-        generator = LlamaGenerator(
-            model_path=args.llama_model_path,
-            device=args.device,
-            load_in_4bit=load_in_4bit,
-            load_in_8bit=load_in_8bit
-        )
+        if args.generator_type == "llama":
+            generator = LlamaGenerator(
+                model_path=args.llama_model_path,
+                device=args.device,
+                load_in_4bit=load_in_4bit,
+                load_in_8bit=load_in_8bit
+            )
+        else:  # local_qwen
+            generator = LocalQwenGenerator(
+                model_path=args.llama_model_path,
+                device=args.device,
+                load_in_4bit=load_in_4bit,
+                load_in_8bit=load_in_8bit
+            )
     else:
         generator = QwenGenerator(model=args.model)
     
     # 4. 运行实验
-    generator_name = args.model if args.generator_type == "qwen" else "llama"
+    if args.generator_type == "qwen":
+        generator_name = args.model
+    elif args.generator_type == "local_qwen":
+        generator_name = "local_qwen"
+    else:
+        generator_name = "llama"
     results = []
     for retriever_name, retriever in retrievers.items():
         print(f"\n{'='*60}")
@@ -1524,16 +1760,20 @@ class InteractiveRAGSession:
         model_path: str = None,
         model_name: str = "qwen-plus",
         api_key: str = None,
+        load_in_4bit: bool = False,
+        load_in_8bit: bool = True,
         force_reload: bool = False
     ) -> object:
         """
         加载生成器（缓存）
         
         Args:
-            generator_type: "qwen" 或 "llama"
-            model_path: Llama 模型路径（仅 llama）
-            model_name: Qwen 模型名称（仅 qwen）
+            generator_type: "qwen", "llama" 或 "local_qwen"
+            model_path: 本地模型路径（仅 llama/local_qwen）
+            model_name: Qwen API 模型名称（仅 qwen）
             api_key: DashScope API Key（仅 qwen）
+            load_in_4bit: 是否使用 4bit 量化（仅本地模型）
+            load_in_8bit: 是否使用 8bit 量化（仅本地模型）
             force_reload: 是否强制重新加载
             
         Returns:
@@ -1546,7 +1786,7 @@ class InteractiveRAGSession:
             if self.generator_type == generator_type:
                 # 检查配置是否匹配
                 config_match = (
-                    (generator_type == "llama" and self.generator_config.get("model_path") == model_path) or
+                    (generator_type in ["llama", "local_qwen"] and self.generator_config.get("model_path") == model_path) or
                     (generator_type == "qwen" and self.generator_config.get("model_name") == model_name)
                 )
                 if config_match:
@@ -1559,11 +1799,23 @@ class InteractiveRAGSession:
             print(f"   模型路径: {model_path or Config.LLAMA_MODEL_PATH}")
             self.generator = LlamaGenerator(
                 model_path=model_path,
-                device=self.device
+                device=self.device,
+                load_in_4bit=load_in_4bit,
+                load_in_8bit=load_in_8bit
+            )
+            self.generator_config = {"model_path": model_path}
+        elif generator_type == "local_qwen":
+            print(f"\n🤖 加载本地 Qwen 生成器...")
+            print(f"   模型路径: {model_path or 'Qwen/Qwen2.5-7B-Instruct'}")
+            self.generator = LocalQwenGenerator(
+                model_path=model_path,
+                device=self.device,
+                load_in_4bit=load_in_4bit,
+                load_in_8bit=load_in_8bit
             )
             self.generator_config = {"model_path": model_path}
         elif generator_type == "qwen":
-            print(f"\n🤖 加载 Qwen 生成器...")
+            print(f"\n🤖 加载 Qwen API 生成器...")
             print(f"   模型: {model_name}")
             self.generator = QwenGenerator(
                 model=model_name,
@@ -1571,7 +1823,7 @@ class InteractiveRAGSession:
             )
             self.generator_config = {"model_name": model_name}
         else:
-            raise ValueError(f"未知生成器类型: {generator_type}. 可选: qwen, llama")
+            raise ValueError(f"未知生成器类型: {generator_type}. 可选: qwen, llama, local_qwen")
         
         self.generator_type = generator_type
         print(f"✅ 生成器已缓存: {self.generator.get_name()}")
