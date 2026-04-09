@@ -12,6 +12,15 @@
 
 import os
 import sys
+
+# ============================================
+# 重要：在导入任何其他模块之前设置镜像站点
+# HuggingFace 镜像需要在 datasets 模块导入前设置才能生效
+# ============================================
+if 'HF_ENDPOINT' not in os.environ:
+    os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+    print(f"使用 HuggingFace 镜像站点: {os.environ['HF_ENDPOINT']}")
+
 import json
 import argparse
 from datetime import datetime
