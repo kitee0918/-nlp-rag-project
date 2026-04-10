@@ -1,0 +1,119 @@
+- generic [ref=e3]:
+  - generic [ref=e5]:
+    - img "Google" [ref=e8]
+    - generic [ref=e9]:
+      - generic [ref=e11]:
+        - heading "登入" [level=1] [ref=e12]
+        - paragraph [ref=e13]: 繼續使用 Google Cloud Platform
+      - generic [ref=e14]:
+        - generic [ref=e17]:
+          - generic [ref=e22]:
+            - textbox "電子郵件地址或電話號碼" [active] [ref=e23]
+            - generic:
+              - generic: 電子郵件地址或電話號碼
+          - paragraph [ref=e24]:
+            - link "忘記電子郵件地址？" [ref=e25] [cursor=pointer]:
+              - /url: /signin/usernamerecovery?continue=https://console.cloud.google.com/vertex-ai/colab/notebooks;source%3Downed?facet_url%3Dhttps://docs.cloud.google.com/colab/docs/create-console-quickstart%26hl%3Dzh-tw%26authuser%3D1%26project%3Dcs6493-huiboli2%26vertex_ai_region%3Dasia-east2%26activeNb%3Dprojects/cs6493-huiboli2/locations/asia-east2/repositories/3359328d-5a76-45ed-81ed-11ee7498883a&dsh=S-32263295:1775812066842103&flowEntry=ServiceLogin&flowName=WebLiteSignIn&followup=https://console.cloud.google.com/vertex-ai/colab/notebooks;source%3Downed?facet_url%3Dhttps://docs.cloud.google.com/colab/docs/create-console-quickstart%26hl%3Dzh-tw%26authuser%3D1%26project%3Dcs6493-huiboli2%26vertex_ai_region%3Dasia-east2%26activeNb%3Dprojects/cs6493-huiboli2/locations/asia-east2/repositories/3359328d-5a76-45ed-81ed-11ee7498883a&hl=zh-tw&ifkv=AT1y2_X7kA2Ht6EdgRpw7mjo4R4PGujhXYkFeIpUFzRSWBHlMwYMtYHPZuavNu33PE4PcxDTPzlJ&osid=1&service=cloudconsole
+        - paragraph [ref=e28]:
+          - text: 如果這不是你的電腦，請使用私密瀏覽視窗登入。
+          - link "進一步瞭解如何使用訪客模式" [ref=e29] [cursor=pointer]:
+            - /url: https://support.google.com/accounts?p=signin_privatebrowsing&hl=zh-TW
+        - generic [ref=e31]:
+          - button "下一步" [ref=e33]
+          - link "建立帳戶" [ref=e35] [cursor=pointer]:
+            - /url: /lifecycle/flows/signup?continue=https://console.cloud.google.com/vertex-ai/colab/notebooks;source%3Downed?facet_url%3Dhttps://docs.cloud.google.com/colab/docs/create-console-quickstart%26hl%3Dzh-tw%26authuser%3D1%26project%3Dcs6493-huiboli2%26vertex_ai_region%3Dasia-east2%26activeNb%3Dprojects/cs6493-huiboli2/locations/asia-east2/repositories/3359328d-5a76-45ed-81ed-11ee7498883a&dsh=S-32263295:1775812066842103&flowEntry=SignUp&flowName=GlifWebSignIn&followup=https://console.cloud.google.com/vertex-ai/colab/notebooks;source%3Downed?facet_url%3Dhttps://docs.cloud.google.com/colab/docs/create-console-quickstart%26hl%3Dzh-tw%26authuser%3D1%26project%3Dcs6493-huiboli2%26vertex_ai_region%3Dasia-east2%26activeNb%3Dprojects/cs6493-huiboli2/locations/asia-east2/repositories/3359328d-5a76-45ed-81ed-11ee7498883a&hl=zh-tw&ifkv=AT1y2_X7kA2Ht6EdgRpw7mjo4R4PGujhXYkFeIpUFzRSWBHlMwYMtYHPZuavNu33PE4PcxDTPzlJ&nogm=1&osid=1&service=cloudconsole
+  - contentinfo [ref=e36]:
+    - combobox [ref=e39] [cursor=pointer]:
+      - option "中文（香港）"
+      - option "日本語"
+      - option "简体中文"
+      - option "繁體中文" [selected]
+      - option "Afrikaans"
+      - option "azərbaycan"
+      - option "bosanski"
+      - option "català"
+      - option "Čeština"
+      - option "Cymraeg"
+      - option "Dansk"
+      - option "Deutsch"
+      - option "eesti"
+      - option "English (United Kingdom)"
+      - option "English (United States)"
+      - option "Español (España)"
+      - option "Español (Latinoamérica)"
+      - option "euskara"
+      - option "Filipino"
+      - option "Français (Canada)"
+      - option "Français (France)"
+      - option "Gaeilge"
+      - option "galego"
+      - option "Hrvatski"
+      - option "Indonesia"
+      - option "isiZulu"
+      - option "íslenska"
+      - option "Italiano"
+      - option "Kiswahili"
+      - option "latviešu"
+      - option "lietuvių"
+      - option "magyar"
+      - option "Melayu"
+      - option "Nederlands"
+      - option "norsk"
+      - option "o‘zbek"
+      - option "polski"
+      - option "Português (Brasil)"
+      - option "Português (Portugal)"
+      - option "română"
+      - option "shqip"
+      - option "Slovenčina"
+      - option "slovenščina"
+      - option "srpski (latinica)"
+      - option "Suomi"
+      - option "Svenska"
+      - option "Tiếng Việt"
+      - option "Türkçe"
+      - option "Ελληνικά"
+      - option "беларуская"
+      - option "български"
+      - option "кыргызча"
+      - option "қазақ тілі"
+      - option "македонски"
+      - option "монгол"
+      - option "Русский"
+      - option "српски (ћирилица)"
+      - option "Українська"
+      - option "ქართული"
+      - option "հայերեն"
+      - option "‫עברית‬‎"
+      - option "‫اردو‬‎"
+      - option "‫العربية‬‎"
+      - option "‫فارسی‬‎"
+      - option "አማርኛ"
+      - option "नेपाली"
+      - option "मराठी"
+      - option "हिन्दी"
+      - option "অসমীয়া"
+      - option "বাংলা"
+      - option "ਪੰਜਾਬੀ"
+      - option "ગુજરાતી"
+      - option "ଓଡ଼ିଆ"
+      - option "தமிழ்"
+      - option "తెలుగు"
+      - option "ಕನ್ನಡ"
+      - option "മലയാളം"
+      - option "සිංහල"
+      - option "ไทย"
+      - option "ລາວ"
+      - option "မြန်မာ"
+      - option "ខ្មែរ"
+      - option "한국어"
+    - list [ref=e40]:
+      - listitem [ref=e41]:
+        - link "說明" [ref=e42] [cursor=pointer]:
+          - /url: https://support.google.com/accounts?hl=zh-TW&p=account_iph
+      - listitem [ref=e43]:
+        - link "隱私權設定" [ref=e44] [cursor=pointer]:
+          - /url: https://accounts.google.com/TOS?loc=HK&hl=zh-TW&privacy=true
+      - listitem [ref=e45]:
+        - link "條款" [ref=e46] [cursor=pointer]:
+          - /url: https://accounts.google.com/TOS?loc=HK&hl=zh-TW

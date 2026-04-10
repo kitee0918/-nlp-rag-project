@@ -33,12 +33,14 @@ def _setup_utf8_output():
 
 _setup_utf8_output()
 
+import gc
 import json
 import pickle
 import argparse
 import traceback
 from typing import List, Dict, Tuple, Optional
 from tqdm import tqdm
+
 
 # 数据加载
 import os
