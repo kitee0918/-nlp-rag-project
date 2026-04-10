@@ -439,35 +439,50 @@ class ContrieverRetriever:
         self.device = device
         self.model_name = model_name
         
-        # 加载模型（带重试机制）
+        # 加载模型（兼容新版 transformers/huggingface_hub）
         print(f"加载 Contriever 模型: {model_name}")
-        max_retries = 10  # 增加重试次数
+        max_retries = 3
         import time
+
+        last_error = None
         for attempt in range(max_retries):
             try:
                 print(f"  尝试加载 ({attempt + 1}/{max_retries})...")
+                # 注意：不要再传 resume_download/force_download，
+                # 在部分新版依赖组合下会触发 TypeError。
                 self.tokenizer = AutoTokenizer.from_pretrained(
-                    model_name, 
-                    resume_download=True,
-                    force_download=False
+                    model_name,
+                    use_fast=True,
                 )
-                self.model = AutoModel.from_pretrained(
-                    model_name, 
-                    resume_download=True,
-                    force_download=False
-                )
+                self.model = AutoModel.from_pretrained(model_name)
                 print("  模型加载成功！")
+                last_error = None
                 break
-            except Exception as e:
+            except TypeError as e:
+                last_error = e
+                print(f"  加载失败: {type(e).__name__}: {e}")
                 if attempt < max_retries - 1:
-                    print(f"  加载失败: {type(e).__name__}")
-                    wait_time = 10 + attempt * 5  # 递增等待时间
+                    wait_time = 5 + attempt * 3
                     print(f"  等待 {wait_time} 秒后重试...")
                     time.sleep(wait_time)
                 else:
-                    print(f"  加载模型失败，请检查网络连接")
-                    print(f"  提示: 如果本地网络不稳定，建议在 Colab 上运行")
-                    raise
+                    print("  最终失败：检测到依赖参数兼容问题。")
+            except Exception as e:
+                last_error = e
+                print(f"  加载失败: {type(e).__name__}: {e}")
+                if attempt < max_retries - 1:
+                    wait_time = 5 + attempt * 3
+                    print(f"  等待 {wait_time} 秒后重试...")
+                    time.sleep(wait_time)
+                else:
+                    print("  最终失败：请检查网络或 HuggingFace 访问。")
+
+        if last_error is not None:
+            raise RuntimeError(
+                "Contriever 加载失败。建议先运行 BM25（use_retrievers=['bm25']）验证主流程，"
+                "随后再排查 HF 依赖/网络。"
+            ) from last_error
+
         
         self.model.to(device)
         self.model.eval()
