@@ -40,7 +40,7 @@ except ImportError:
 import torch
 
 # 导入现有模块
-from rag_finance import (
+from methods import (
     load_financebench,
     BM25Retriever,
     ContrieverRetriever,
@@ -52,7 +52,7 @@ from rag_finance import (
     Config
 )
 
-from hallucination_eval import (
+from eval import (
     FActScoreEvaluator,
     FActScoreLocalEvaluator,
     SelfRAGGenerator,

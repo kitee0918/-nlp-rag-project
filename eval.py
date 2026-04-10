@@ -1417,7 +1417,7 @@ def run_hallucination_experiment(
         实验结果
     """
     # 导入检索器
-    from rag_finance import BM25Retriever, ContrieverRetriever
+    from retriever import BM25Retriever, ContrieverRetriever
     
     # 初始化检索器
     if retriever_type.lower() == "bm25":
