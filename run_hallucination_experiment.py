@@ -166,10 +166,73 @@ def evaluate_vanilla_rag(
 
 
 # ============================================
+# LLM Only 幻觉评估（无检索）
+# ============================================
+
+def evaluate_llm_only(
+    examples: List[Dict],
+    generator,
+    factscore_evaluator,
+    verbose: bool = False
+) -> Dict:
+    """
+    评估 LLM Only（不检索，直接生成）
+    """
+    factscores = []
+    f1_scores = []
+    gen_em_scores = []
+    all_results = []
+
+    for i, example in enumerate(examples):
+        result = generator.generate(example['question'], [])
+
+        factscore_result = factscore_evaluator.compute_factscore(
+            answer=result['answer'],
+            evidence=example.get('evidence_text', ''),
+            verbose=verbose and i < 3
+        )
+
+        f1 = generation_f1(result['answer'], [example['answer']])
+        gen_em = generation_em(result['answer'], [example['answer']])
+
+        factscores.append(factscore_result['factscore'])
+        f1_scores.append(f1)
+        gen_em_scores.append(gen_em)
+
+        all_results.append({
+            "question": example['question'],
+            "answer": result['answer'],
+            "ground_truth": example['answer'],
+            "factscore": factscore_result['factscore'],
+            "hit_at_k": 0.0,
+            "f1": f1,
+            "gen_em": gen_em,
+            "ret_em": 0.0,
+            "num_atoms": factscore_result['num_atoms'],
+            "num_supported_atoms": factscore_result['num_supported'],
+            "retrieved_documents": []
+        })
+
+    return {
+        "avg_factscore": sum(factscores) / len(factscores) if factscores else 0.0,
+        "avg_hit_at_k": 0.0,
+        "avg_f1": sum(f1_scores) / len(f1_scores) if f1_scores else 0.0,
+        "avg_gen_em": sum(gen_em_scores) / len(gen_em_scores) if gen_em_scores else 0.0,
+        "avg_ret_em": 0.0,
+        "num_examples": len(examples),
+        "individual_results": all_results,
+        "retriever": "LLM_ONLY",
+        "generator": generator.get_name(),
+        "method": "LLM Only"
+    }
+
+
+# ============================================
 # Self-RAG 幻觉评估
 # ============================================
 
 def evaluate_self_rag(
+
     examples: List[Dict],
     hallucination_evaluator: HallucinationEvaluator,
     top_k: int = 3,
@@ -330,11 +393,30 @@ def run_comparison(
         device=device
     )
     
-    # 4. 评估 Vanilla RAG
+    # 4. 评估 LLM Only
+    print("\n" + "=" * 70)
+    print("📊 评估 LLM Only（无检索）...")
+    print("=" * 70)
+
+    llm_only_results = evaluate_llm_only(
+        examples,
+        vanilla_generator,
+        factscore_evaluator,
+        verbose=verbose
+    )
+
+    print(f"\nLLM Only 结果:")
+    print(f"  FActScore:    {llm_only_results['avg_factscore']:.4f}")
+    print(f"  Hit@K:        {llm_only_results['avg_hit_at_k']:.4f}")
+    print(f"  F1 Score:     {llm_only_results['avg_f1']:.4f}")
+    print(f"  Gen EM:       {llm_only_results['avg_gen_em']:.4f}")
+    print(f"  Ret EM:       {llm_only_results['avg_ret_em']:.4f}")
+
+    # 5. 评估 Vanilla RAG
     print("\n" + "=" * 70)
     print("📊 评估 Vanilla RAG...")
     print("=" * 70)
-    
+
     vanilla_rag = RAGSystem(retriever, vanilla_generator, top_k=top_k)
     vanilla_results = evaluate_vanilla_rag(
         vanilla_rag,
@@ -343,26 +425,26 @@ def run_comparison(
         top_k=top_k,
         verbose=verbose
     )
-    
+
     print(f"\nVanilla RAG 结果:")
     print(f"  FActScore:    {vanilla_results['avg_factscore']:.4f}")
     print(f"  Hit@K:        {vanilla_results['avg_hit_at_k']:.4f}")
     print(f"  F1 Score:     {vanilla_results['avg_f1']:.4f}")
     print(f"  Gen EM:       {vanilla_results['avg_gen_em']:.4f}")
     print(f"  Ret EM:       {vanilla_results['avg_ret_em']:.4f}")
-    
-    # 5. 评估 Self-RAG
+
+    # 6. 评估 Self-RAG
     print("\n" + "=" * 70)
     print("📊 评估 Self-RAG...")
     print("=" * 70)
-    
+
     self_rag_results = evaluate_self_rag(
         examples,
         hallucination_evaluator,
         top_k=top_k,
         verbose=verbose
     )
-    
+
     print(f"\nSelf-RAG 结果:")
     print(f"  FActScore:    {self_rag_results['avg_factscore']:.4f}")
     print(f"  Hit@K:        {self_rag_results['avg_hit_at_k']:.4f}")
@@ -370,33 +452,42 @@ def run_comparison(
     print(f"  Gen EM:       {self_rag_results['avg_gen_em']:.4f}")
     print(f"  Ret EM:       {self_rag_results['avg_ret_em']:.4f}")
     print(f"  支持率:       {self_rag_results['support_rate']:.4f}")
-    
-    # 6. 对比分析
+
+    # 7. 对比分析
     print("\n" + "=" * 80)
     print("📈 对比结果")
     print("=" * 80)
     print(f"{'方法':<12} {'FActScore':<10} {'Hit@K':<10} {'F1':<10} {'Gen EM':<10} {'Ret EM':<10}")
     print("-" * 80)
+    print(f"{'LLM Only':<12} {llm_only_results['avg_factscore']:<10.4f} {llm_only_results['avg_hit_at_k']:<10.4f} {llm_only_results['avg_f1']:<10.4f} {llm_only_results['avg_gen_em']:<10.4f} {llm_only_results['avg_ret_em']:<10.4f}")
     print(f"{'Vanilla RAG':<12} {vanilla_results['avg_factscore']:<10.4f} {vanilla_results['avg_hit_at_k']:<10.4f} {vanilla_results['avg_f1']:<10.4f} {vanilla_results['avg_gen_em']:<10.4f} {vanilla_results['avg_ret_em']:<10.4f}")
     print(f"{'Self-RAG':<12} {self_rag_results['avg_factscore']:<10.4f} {self_rag_results['avg_hit_at_k']:<10.4f} {self_rag_results['avg_f1']:<10.4f} {self_rag_results['avg_gen_em']:<10.4f} {self_rag_results['avg_ret_em']:<10.4f}")
     print("=" * 80)
-    
-    # 计算提升
+
+    # 计算提升（保留原有 Self-RAG vs Vanilla 口径，另增对 LLM-Only 的提升）
     def _calc_improve(new_val, old_val):
         return (new_val - old_val) / old_val * 100 if old_val > 0 else 0
-    
+
     factscore_improve = _calc_improve(self_rag_results['avg_factscore'], vanilla_results['avg_factscore'])
     hit_improve = _calc_improve(self_rag_results['avg_hit_at_k'], vanilla_results['avg_hit_at_k'])
     f1_improve = _calc_improve(self_rag_results['avg_f1'], vanilla_results['avg_f1'])
     gen_em_improve = _calc_improve(self_rag_results['avg_gen_em'], vanilla_results['avg_gen_em'])
     ret_em_improve = _calc_improve(self_rag_results['avg_ret_em'], vanilla_results['avg_ret_em'])
-    
+
+    self_vs_llm_factscore = _calc_improve(self_rag_results['avg_factscore'], llm_only_results['avg_factscore'])
+    self_vs_llm_f1 = _calc_improve(self_rag_results['avg_f1'], llm_only_results['avg_f1'])
+
     print(f"\n📊 Self-RAG vs Vanilla RAG 提升:")
     print(f"   FActScore: {'+' if factscore_improve >= 0 else ''}{factscore_improve:.2f}%")
     print(f"   Hit@K:     {'+' if hit_improve >= 0 else ''}{hit_improve:.2f}%")
     print(f"   F1 Score:  {'+' if f1_improve >= 0 else ''}{f1_improve:.2f}%")
     print(f"   Gen EM:    {'+' if gen_em_improve >= 0 else ''}{gen_em_improve:.2f}%")
     print(f"   Ret EM:    {'+' if ret_em_improve >= 0 else ''}{ret_em_improve:.2f}%")
+
+    print(f"\n📊 Self-RAG vs LLM Only 提升:")
+    print(f"   FActScore: {'+' if self_vs_llm_factscore >= 0 else ''}{self_vs_llm_factscore:.2f}%")
+    print(f"   F1 Score:  {'+' if self_vs_llm_f1 >= 0 else ''}{self_vs_llm_f1:.2f}%")
+
     
     # 7. 保存结果
     os.makedirs(Config.RESULTS_DIR, exist_ok=True)
@@ -410,7 +501,15 @@ def run_comparison(
             "subset_size": subset_size,
             "top_k": top_k,
             "retriever": retriever_type,
-            "model": model
+            "model": model,
+            "generator_type": generator_type
+        },
+        "llm_only": {
+            "avg_factscore": llm_only_results['avg_factscore'],
+            "avg_hit_at_k": llm_only_results['avg_hit_at_k'],
+            "avg_f1": llm_only_results['avg_f1'],
+            "avg_gen_em": llm_only_results['avg_gen_em'],
+            "avg_ret_em": llm_only_results['avg_ret_em']
         },
         "vanilla_rag": {
             "avg_factscore": vanilla_results['avg_factscore'],
@@ -432,11 +531,15 @@ def run_comparison(
             "hit_at_k": hit_improve,
             "f1": f1_improve,
             "gen_em": gen_em_improve,
-            "ret_em": ret_em_improve
+            "ret_em": ret_em_improve,
+            "self_vs_llm_factscore": self_vs_llm_factscore,
+            "self_vs_llm_f1": self_vs_llm_f1
         },
+        "llm_only_details": llm_only_results['individual_results'][:10],
         "vanilla_rag_details": vanilla_results['individual_results'][:10],  # 只保存前10个详细结果
         "self_rag_details": self_rag_results['individual_results'][:10]
     }
+
     
     with open(result_file, 'w', encoding='utf-8') as f:
         json.dump(comparison_results, f, ensure_ascii=False, indent=2)
