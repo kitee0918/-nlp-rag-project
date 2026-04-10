@@ -93,7 +93,8 @@ class Config:
     
     # 阿里百炼 API 配置
     # 请在此处填写你的 API Key，或通过环境变量设置
-    DASHSCOPE_API_KEY = os.environ.get("DASHSCOPE_API_KEY", "sk-0f66e1b456ab47f889da87e04a6512a6")
+    DASHSCOPE_API_KEY = os.environ.get("DASHSCOPE_API_KEY", "")
+
     DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     
     # 模型名称
@@ -110,8 +111,30 @@ class Config:
 
 
 # ============================================
+# GPU 显存清理工具
+# ============================================
+
+def release_contriever_gpu(retriever=None):
+    """释放 Contriever 相关对象并清理 CUDA 显存（便于后续加载 Qwen 本地模型）。"""
+    if retriever is not None:
+        for name in ["model", "tokenizer", "embeddings"]:
+            if hasattr(retriever, name):
+                try:
+                    delattr(retriever, name)
+                except Exception:
+                    pass
+
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        if hasattr(torch.cuda, "ipc_collect"):
+            torch.cuda.ipc_collect()
+
+
+# ============================================
 # 数据加载模块
 # ============================================
+
 
 def load_financebench(subset_size: Optional[int] = None) -> Tuple[List[Dict], List[Dict]]:
     """
@@ -981,12 +1004,18 @@ class RAGSystem:
         result.update({
             "question": question,
             "retrieved_documents": [
-                {"id": doc['id'], "title": doc.get('title', ''), "score": score}
+                {
+                    "id": doc['id'],
+                    "title": doc.get('title', ''),
+                    "text": doc.get('text', ''),
+                    "score": score
+                }
                 for doc, score in retrieved_docs
             ],
             "retriever": self.retriever.get_name(),
             "generator": self.generator.get_name()
         })
+
         
         return result
     

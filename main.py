@@ -62,8 +62,10 @@ from eval import (
     normalise,
     retrieval_em,
     generation_em,
-    generation_f1
+    generation_f1,
+    evaluate_all_metrics
 )
+
 
 # 向后兼容映射
 GENERATOR_TYPE_MAPPING = {
@@ -287,11 +289,39 @@ def evaluate_self_rag(
     return results
 
 
+def aggregate_all_metrics(rows: List[Dict], answer_key: str, gold_key: str) -> Dict:
+    """对 evaluate_all_metrics 做样本均值聚合。"""
+    if not rows:
+        return {}
+
+    metrics_sum = {}
+    count = 0
+    for row in rows:
+        prediction = row.get(answer_key, "")
+        gold_answer = row.get(gold_key, "")
+        pred_docs = row.get("retrieved_documents", []) or []
+        doc_texts = [d.get("text", "") for d in pred_docs if d.get("text")]
+
+        metric_row = evaluate_all_metrics(
+            prediction=prediction,
+            pred_docs=pred_docs,
+            gold_answers=[gold_answer] if gold_answer else [],
+            documents=doc_texts if doc_texts else None,
+        )
+
+        for k, v in metric_row.items():
+            metrics_sum[k] = metrics_sum.get(k, 0.0) + float(v)
+        count += 1
+
+    return {k: (v / count if count > 0 else 0.0) for k, v in metrics_sum.items()}
+
+
 # ============================================
 # 对比实验
 # ============================================
 
 def run_comparison(
+
     subset_size: int = 20,
     top_k: int = 3,
     retriever_type: str = "bm25",
@@ -453,7 +483,38 @@ def run_comparison(
     print(f"  Ret EM:       {self_rag_results['avg_ret_em']:.4f}")
     print(f"  支持率:       {self_rag_results['support_rate']:.4f}")
 
-    # 7. 对比分析
+    # 7. evaluate_all_metrics 全量指标（按方法聚合均值）
+    llm_all_metrics = aggregate_all_metrics(
+        llm_only_results["individual_results"], answer_key="answer", gold_key="ground_truth"
+    )
+    vanilla_all_metrics = aggregate_all_metrics(
+        vanilla_results["individual_results"], answer_key="answer", gold_key="ground_truth"
+    )
+    self_all_metrics = aggregate_all_metrics(
+        self_rag_results["individual_results"], answer_key="self_rag_answer", gold_key="ground_truth_answer"
+    )
+
+    print("\n=== evaluate_all_metrics 均值 ===")
+    for name, metrics in [
+        ("LLM Only", llm_all_metrics),
+        ("Vanilla RAG", vanilla_all_metrics),
+        ("Self-RAG", self_all_metrics),
+    ]:
+        print(f"\n{name}:")
+        print(
+            "  "
+            f"GenEM={metrics.get('generation_em', 0.0):.4f}, "
+            f"GenF1={metrics.get('generation_f1', 0.0):.4f}, "
+            f"HitRate={metrics.get('hit_rate', 0.0):.4f}, "
+            f"RetEM={metrics.get('retrieval_em', 0.0):.4f}, "
+            f"CitP={metrics.get('citation_precision', 0.0):.4f}, "
+            f"CitR={metrics.get('citation_recall', 0.0):.4f}, "
+            f"Hall={metrics.get('hallucination_rate', 0.0):.4f}, "
+            f"FactSimple={metrics.get('factscore_simple', 0.0):.4f}"
+        )
+
+    # 8. 对比分析
+
     print("\n" + "=" * 80)
     print("📈 对比结果")
     print("=" * 80)
@@ -526,7 +587,13 @@ def run_comparison(
             "avg_ret_em": self_rag_results['avg_ret_em'],
             "support_rate": self_rag_results['support_rate']
         },
+        "all_metrics": {
+            "llm_only": llm_all_metrics,
+            "vanilla_rag": vanilla_all_metrics,
+            "self_rag": self_all_metrics
+        },
         "improvement": {
+
             "factscore": factscore_improve,
             "hit_at_k": hit_improve,
             "f1": f1_improve,

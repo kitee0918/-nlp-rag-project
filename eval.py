@@ -1114,9 +1114,15 @@ class SelfRAGGenerator:
             # Step 2: 检索
             retrieved_docs = self.retriever.retrieve(question, top_k=top_k)
             all_retrieved_docs = [
-                {"id": doc['id'], "title": doc.get('title', ''), "score": score}
+                {
+                    "id": doc['id'],
+                    "title": doc.get('title', ''),
+                    "text": doc.get('text', ''),
+                    "score": score
+                }
                 for doc, score in retrieved_docs
             ]
+
             
             # Step 3: 判断相关性
             is_relevant, relevant_indices = self._check_relevance(

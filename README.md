@@ -37,10 +37,26 @@ python main.py --subset 20 --top_k 3 --retriever bm25 --model qwen-plus
 python main.py --subset 10 --top_k 3 --retriever contriever --verbose
 ```
 
+## Colab 拉取最新代码（推荐）
+
+```bash
+git clone -b merged_finance https://github.com/kitee0918/-nlp-rag-project.git /content/-nlp-rag-project
+cd /content/-nlp-rag-project
+```
+
+如目录已存在，使用：
+
+```bash
+git -C /content/-nlp-rag-project fetch origin
+git -C /content/-nlp-rag-project checkout merged_finance
+git -C /content/-nlp-rag-project pull origin merged_finance
+```
+
 ## 说明
 
-- `methods.py`：主流程与实验方法
+- `methods.py`：主流程与实验方法（含 `release_contriever_gpu`）
 - `retriever.py`：检索类导出
 - `llm.py`：生成器类导出
-- `eval.py`：幻觉与事实性评估
+- `eval.py`：幻觉与事实性评估（含 `evaluate_all_metrics`）
 - `prompt.py`：集中管理提示词模板
+
