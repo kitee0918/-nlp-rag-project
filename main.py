@@ -45,7 +45,7 @@ from methods import (
     BM25Retriever,
     ContrieverRetriever,
     QwenGenerator,
-    LlamaGenerator,
+    LLMGenerator,
     RAGSystem,
     compute_f1,
     compute_retrieval_metrics,
@@ -399,11 +399,12 @@ def run_single_evaluation(
         if evaluation_type == "llm_only":
             print("\n🔹 运行 LLM Only 评估...")
             if generator_type == "local":
-                # 使用懒加载和 4bit 量化
-                generator = LlamaGenerator(
+                # 使用懒加载和 4bit 量化（完全在GPU上）
+                generator = LLMGenerator(
                     model_path=model_path or Config.LLAMA_MODEL_PATH,
                     device=device,
                     lazy_load=True,  # 启用懒加载
+                    load_in_8bit=False,  # 不使用 8bit 量化
                     load_in_4bit=True  # 使用 4bit 量化
                 )
                 factscore_evaluator = FActScoreLocalEvaluator(
@@ -427,11 +428,12 @@ def run_single_evaluation(
         elif evaluation_type == "vanilla_rag":
             print("\n🔹 运行 Vanilla RAG 评估...")
             if generator_type == "local":
-                # 使用懒加载和 4bit 量化
-                generator = LlamaGenerator(
+                # 使用懒加载和 4bit 量化（完全在GPU上）
+                generator = LLMGenerator(
                     model_path=model_path or Config.LLAMA_MODEL_PATH,
                     device=device,
                     lazy_load=True,  # 启用懒加载
+                    load_in_8bit=False,  # 不使用 8bit 量化
                     load_in_4bit=True  # 使用 4bit 量化
                 )
                 factscore_evaluator = FActScoreLocalEvaluator(
@@ -588,9 +590,10 @@ def run_comparison(
     
     # Vanilla RAG 生成器
     if generator_type == "local":
-        vanilla_generator = LlamaGenerator(
+        vanilla_generator = LLMGenerator(
             model_path=model_path or Config.LLAMA_MODEL_PATH,
             device=device,
+            load_in_8bit=False,  # 不使用 8bit 量化
             load_in_4bit=True  # 使用 4bit 量化
         )
         # 本地模型使用 FActScoreLocalEvaluator

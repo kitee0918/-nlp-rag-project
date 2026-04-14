@@ -643,12 +643,41 @@ class FActScoreLocalEvaluator:
             print("使用全精度 (FP16)")
 
         # 加载模型
+        # 尝试直接加载到 GPU，避免设备映射问题
+        device_map = {"": self.device} if self.device == "cuda" else None
         self.model = AutoModelForCausalLM.from_pretrained(
             model_path,
             torch_dtype=torch.float16,
-            device_map="auto",
-            quantization_config=quantization_config
+            device_map=device_map,
+            quantization_config=quantization_config,
+            trust_remote_code=True,
+            low_cpu_mem_usage=True  # 减少CPU内存使用
         )
+
+        # 验证所有模块都在GPU上
+        if self.device == "cuda" and hasattr(self.model, 'hf_device_map'):
+            devices = set(self.model.hf_device_map.values())
+            if "cpu" in devices or "disk" in devices:
+                # 如果还有模块在CPU或disk上，尝试调整
+                print("警告：检测到部分模块仍在CPU或disk上，尝试重新加载...")
+                del self.model
+                torch.cuda.empty_cache()
+
+                # 使用更激进的设备映射策略
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    model_path,
+                    torch_dtype=torch.float16,
+                    device_map=device_map,
+                    quantization_config=quantization_config,
+                    trust_remote_code=True,
+                    low_cpu_mem_usage=True,
+                    offload_folder=None  # 禁用offload
+                )
+
+                # 再次检查
+                devices = set(self.model.hf_device_map.values())
+                if "cpu" in devices or "disk" in devices:
+                    print(f"警告：仍有模块在{devices}上，但继续运行")
         self.model.eval()
 
         if self.tokenizer.pad_token is None:

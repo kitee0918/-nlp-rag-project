@@ -744,8 +744,8 @@ class QwenGenerator:
 # LLM 生成器（本地 Llama 模型 - Colab 专用）
 # ============================================
 
-class LlamaGenerator:
-    """本地 Llama 模型生成器 - 适用于 Colab 环境"""
+class LLMGenerator:
+    """本地 LLM 模型生成器 - 支持多种模型，适用于 Colab 环境"""
     
     def __init__(
         self,
@@ -769,7 +769,7 @@ class LlamaGenerator:
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self._initialized = False
 
-        print(f"Llama 模型路径: {self.model_path}")
+        print(f"LLM 模型路径: {self.model_path}")
         print(f"设备: {self.device}")
 
         # 检查模型路径是否存在
@@ -826,13 +826,40 @@ class LlamaGenerator:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
         # 加载模型
+        # 4bit 量化完全在 GPU 上
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_path,
             torch_dtype=torch.float16,
-            device_map="auto" if self.device == "cuda" else None,
+            device_map={"": self.device},  # 强制完全在 GPU 上
             quantization_config=self.quantization_config,
-            trust_remote_code=True
+            trust_remote_code=True,
+            low_cpu_mem_usage=True  # 减少CPU内存使用
         )
+
+        # 验证所有模块都在GPU上
+        if self.device == "cuda" and hasattr(self.model, 'hf_device_map'):
+            devices = set(self.model.hf_device_map.values())
+            if "cpu" in devices or "disk" in devices:
+                # 如果还有模块在CPU或disk上，尝试调整
+                print("警告：检测到部分模块仍在CPU或disk上，尝试重新加载...")
+                del self.model
+                torch.cuda.empty_cache()
+
+                # 使用更激进的设备映射策略
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_path,
+                    torch_dtype=torch.float16,
+                    device_map={"": self.device},  # 强制完全在 GPU 上
+                    quantization_config=self.quantization_config,
+                    trust_remote_code=True,
+                    low_cpu_mem_usage=True,
+                    offload_folder=None  # 禁用offload
+                )
+
+                # 再次检查
+                devices = set(self.model.hf_device_map.values())
+                if "cpu" in devices or "disk" in devices:
+                    print(f"警告：仍有模块在{devices}上，但继续运行")
 
         if self.device == "cpu":
             self.model = self.model.to(self.device)
@@ -848,7 +875,7 @@ class LlamaGenerator:
             device_map="auto" if self.device == "cuda" else None
         )
 
-        print(f"Llama 模型加载完成！")
+        print(f"LLM 模型加载完成！")
         self._initialized = True
 
     def ensure_initialized(self):
@@ -1009,7 +1036,7 @@ def create_generator(
             model=model or Config.QWEN_MODEL
         )
     elif generator_type == "local":
-        return LlamaGenerator(
+        return LLMGenerator(
             model_path=model_path,
             device=device
         )
