@@ -403,14 +403,19 @@ def run_single_evaluation(
                     model_path=model_path or Config.LLAMA_MODEL_PATH,
                     device=device
                 )
+                # 使用懒加载
                 factscore_evaluator = FActScoreLocalEvaluator(
                     model_path=model_path or Config.LLAMA_MODEL_PATH,
-                    device=device
+                    device=device,
+                    lazy_load=True  # 启用懒加载
                 )
-                factscore_evaluator._load_model(model_path or Config.LLAMA_MODEL_PATH)
             else:
                 generator = QwenGenerator(model=model)
                 factscore_evaluator = FActScoreEvaluator(model=model)
+
+            # 确保在评估前初始化（如果支持懒加载）
+            if hasattr(factscore_evaluator, 'ensure_initialized'):
+                factscore_evaluator.ensure_initialized()
 
             results = evaluate_llm_only(examples, generator, factscore_evaluator, verbose=verbose)
 
@@ -421,14 +426,19 @@ def run_single_evaluation(
                     model_path=model_path or Config.LLAMA_MODEL_PATH,
                     device=device
                 )
+                # 使用懒加载
                 factscore_evaluator = FActScoreLocalEvaluator(
                     model_path=model_path or Config.LLAMA_MODEL_PATH,
-                    device=device
+                    device=device,
+                    lazy_load=True  # 启用懒加载
                 )
-                factscore_evaluator._load_model(model_path or Config.LLAMA_MODEL_PATH)
             else:
                 generator = QwenGenerator(model=model)
                 factscore_evaluator = FActScoreEvaluator(model=model)
+
+            # 确保在评估前初始化（如果支持懒加载）
+            if hasattr(factscore_evaluator, 'ensure_initialized'):
+                factscore_evaluator.ensure_initialized()
 
             rag_system = RAGSystem(retriever, generator, top_k=top_k)
             results = evaluate_vanilla_rag(rag_system, examples, factscore_evaluator, top_k=top_k, verbose=verbose)
@@ -466,9 +476,14 @@ def run_single_evaluation(
         if generator is not None and hasattr(generator, 'model') and generator.model is not None:
             del generator.model
             del generator.tokenizer
-        if factscore_evaluator is not None and hasattr(factscore_evaluator, 'model') and factscore_evaluator.model is not None:
-            del factscore_evaluator.model
-            del factscore_evaluator.tokenizer
+        if factscore_evaluator is not None:
+            # 如果支持 cleanup 方法，使用它
+            if hasattr(factscore_evaluator, 'cleanup'):
+                factscore_evaluator.cleanup()
+            # 否则手动清理
+            elif hasattr(factscore_evaluator, 'model') and factscore_evaluator.model is not None:
+                del factscore_evaluator.model
+                del factscore_evaluator.tokenizer
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             print(f"GPU 显存已清空，当前分配：{torch.cuda.memory_allocated() / 1024**2:.2f} MB")

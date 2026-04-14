@@ -600,20 +600,22 @@ class FActScoreLocalEvaluator:
     优势：无需 API 调用，更快更省钱
     """
     
-    def __init__(self, model_path: str = None, device: str = None):
+    def __init__(self, model_path: str = None, device: str = None, lazy_load: bool = False):
         """
         初始化本地模型 FActScore 评估器
-        
+
         Args:
             model_path: 本地模型路径（如果为 None，需要后续设置）
             device: 运行设备
+            lazy_load: 是否使用懒加载（默认 False，保持向后兼容）
         """
         self.model = None
         self.tokenizer = None
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.model_path = model_path
-        
-        if model_path and os.path.exists(model_path):
+        self._initialized = False
+
+        if not lazy_load and model_path and os.path.exists(model_path):
             self._load_model(model_path)
     
     
@@ -633,8 +635,32 @@ class FActScoreLocalEvaluator:
             self.tokenizer.pad_token = self.tokenizer.eos_token
         
         print("✅ 本地模型加载完成")
-    
-    
+        self._initialized = True
+
+    def ensure_initialized(self):
+        """确保组件已加载（惰性加载入口）"""
+        if not self._initialized:
+            self._load_model(self.model_path)
+
+    def cleanup(self):
+        """释放模型占用的内存/显存"""
+        if not self._initialized:
+            return
+
+        if hasattr(self, 'model') and self.model is not None:
+            del self.model
+        if hasattr(self, 'tokenizer') and self.tokenizer is not None:
+            del self.tokenizer
+        self._initialized = False
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            print(f"已释放 FActScore 显存，当前分配：{torch.cuda.memory_allocated() / 1024**2:.2f} MB")
+
+    def is_initialized(self):
+        """检查是否已初始化"""
+        return self._initialized
+
     def set_model(self, model, tokenizer):
         """
         直接设置模型（用于已加载的模型）
