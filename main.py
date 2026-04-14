@@ -399,11 +399,12 @@ def run_single_evaluation(
         if evaluation_type == "llm_only":
             print("\n🔹 运行 LLM Only 评估...")
             if generator_type == "local":
+                # 使用懒加载
                 generator = LlamaGenerator(
                     model_path=model_path or Config.LLAMA_MODEL_PATH,
-                    device=device
+                    device=device,
+                    lazy_load=True  # 启用懒加载
                 )
-                # 使用懒加载
                 factscore_evaluator = FActScoreLocalEvaluator(
                     model_path=model_path or Config.LLAMA_MODEL_PATH,
                     device=device,
@@ -414,6 +415,8 @@ def run_single_evaluation(
                 factscore_evaluator = FActScoreEvaluator(model=model)
 
             # 确保在评估前初始化（如果支持懒加载）
+            if hasattr(generator, 'ensure_initialized'):
+                generator.ensure_initialized()
             if hasattr(factscore_evaluator, 'ensure_initialized'):
                 factscore_evaluator.ensure_initialized()
 
@@ -422,11 +425,12 @@ def run_single_evaluation(
         elif evaluation_type == "vanilla_rag":
             print("\n🔹 运行 Vanilla RAG 评估...")
             if generator_type == "local":
+                # 使用懒加载
                 generator = LlamaGenerator(
                     model_path=model_path or Config.LLAMA_MODEL_PATH,
-                    device=device
+                    device=device,
+                    lazy_load=True  # 启用懒加载
                 )
-                # 使用懒加载
                 factscore_evaluator = FActScoreLocalEvaluator(
                     model_path=model_path or Config.LLAMA_MODEL_PATH,
                     device=device,
@@ -437,6 +441,8 @@ def run_single_evaluation(
                 factscore_evaluator = FActScoreEvaluator(model=model)
 
             # 确保在评估前初始化（如果支持懒加载）
+            if hasattr(generator, 'ensure_initialized'):
+                generator.ensure_initialized()
             if hasattr(factscore_evaluator, 'ensure_initialized'):
                 factscore_evaluator.ensure_initialized()
 
@@ -473,9 +479,14 @@ def run_single_evaluation(
         print("\n🧹 清理资源...")
         if hallucination_evaluator is not None:
             hallucination_evaluator.cleanup()
-        if generator is not None and hasattr(generator, 'model') and generator.model is not None:
-            del generator.model
-            del generator.tokenizer
+        if generator is not None:
+            # 如果支持 cleanup 方法，使用它
+            if hasattr(generator, 'cleanup'):
+                generator.cleanup()
+            # 否则手动清理
+            elif hasattr(generator, 'model') and generator.model is not None:
+                del generator.model
+                del generator.tokenizer
         if factscore_evaluator is not None:
             # 如果支持 cleanup 方法，使用它
             if hasattr(factscore_evaluator, 'cleanup'):

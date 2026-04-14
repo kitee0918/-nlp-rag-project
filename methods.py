@@ -748,27 +748,30 @@ class LlamaGenerator:
     """本地 Llama 模型生成器 - 适用于 Colab 环境"""
     
     def __init__(
-        self, 
-        model_path: str = None, 
+        self,
+        model_path: str = None,
         device: str = None,
         load_in_8bit: bool = True,
-        load_in_4bit: bool = False
+        load_in_4bit: bool = False,
+        lazy_load: bool = False
     ):
         """
         初始化 Llama 生成器
-        
+
         Args:
             model_path: 模型路径（默认使用 Config.LLAMA_MODEL_PATH）
             device: 运行设备
             load_in_8bit: 是否使用 8bit 量化（节省显存）
             load_in_4bit: 是否使用 4bit 量化（更省显存）
+            lazy_load: 是否使用懒加载（默认 False，保持向后兼容）
         """
         self.model_path = model_path or Config.LLAMA_MODEL_PATH
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        
-        print(f"正在加载 Llama 模型: {self.model_path}")
+        self._initialized = False
+
+        print(f"Llama 模型路径: {self.model_path}")
         print(f"设备: {self.device}")
-        
+
         # 检查模型路径是否存在
         if not os.path.exists(self.model_path):
             raise ValueError(
@@ -776,21 +779,7 @@ class LlamaGenerator:
                 f"请先下载模型或检查路径是否正确。\n"
                 f"下载方法: 使用 llama/download_model.py"
             )
-        
-        
-        # 加载 tokenizer
-        from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
-        
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self.model_path,
-            trust_remote_code=True
-        )
-        
-        # 设置 pad_token
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
-        
-        
+
         # 量化配置
         quantization_config = None
         if load_in_4bit:
@@ -801,30 +790,55 @@ class LlamaGenerator:
                 bnb_4bit_use_double_quant=True,
                 bnb_4bit_quant_type="nf4"
             )
-            print("使用 4bit 量化")
+            print("将使用 4bit 量化")
         elif load_in_8bit:
             from transformers import BitsAndBytesConfig
             quantization_config = BitsAndBytesConfig(
                 load_in_8bit=True
             )
-            print("使用 8bit 量化")
+            print("将使用 8bit 量化")
         else:
-            print("使用全精度 (FP16)")
-        
+            print("将使用全精度 (FP16)")
+
+        self.quantization_config = quantization_config
+
+        # 如果不是懒加载，立即加载
+        if not lazy_load:
+            self._load_model()
+
+    def _load_model(self):
+        """加载模型（内部方法）"""
+        if self._initialized:
+            return
+
+        print(f"正在加载 Llama 模型: {self.model_path}")
+
+        # 加载 tokenizer
+        from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.model_path,
+            trust_remote_code=True
+        )
+
+        # 设置 pad_token
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+
         # 加载模型
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_path,
             torch_dtype=torch.float16,
             device_map="auto" if self.device == "cuda" else None,
-            quantization_config=quantization_config,
+            quantization_config=self.quantization_config,
             trust_remote_code=True
         )
-        
+
         if self.device == "cpu":
             self.model = self.model.to(self.device)
-        
+
         self.model.eval()
-        
+
         # 创建 pipeline
         self.pipe = pipeline(
             "text-generation",
@@ -833,11 +847,35 @@ class LlamaGenerator:
             torch_dtype=torch.float16,
             device_map="auto" if self.device == "cuda" else None
         )
-        
+
         print(f"Llama 模型加载完成！")
-        
-        # 保存引用
-        self.pipeline_module = pipeline
+        self._initialized = True
+
+    def ensure_initialized(self):
+        """确保模型已加载（懒加载入口）"""
+        if not self._initialized:
+            self._load_model()
+
+    def cleanup(self):
+        """释放模型占用的内存/显存"""
+        if not self._initialized:
+            return
+
+        if hasattr(self, 'model') and self.model is not None:
+            del self.model
+        if hasattr(self, 'tokenizer') and self.tokenizer is not None:
+            del self.tokenizer
+        if hasattr(self, 'pipe') and self.pipe is not None:
+            del self.pipe
+        self._initialized = False
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            print(f"已释放 Llama 显存，当前分配：{torch.cuda.memory_allocated() / 1024**2:.2f} MB")
+
+    def is_initialized(self):
+        """检查是否已初始化"""
+        return self._initialized
     
     def format_context(self, documents: List[Dict]) -> str:
         """格式化检索到的文档"""
@@ -851,16 +889,19 @@ class LlamaGenerator:
     def generate(self, question: str, documents: List[Dict]) -> Dict:
         """
         根据问题和检索文档生成答案
-        
+
         Args:
             question: 问题
             documents: 检索到的文档列表
-            
+
         Returns:
             生成结果字典
         """
+        # 确保模型已加载
+        self.ensure_initialized()
+
         context = self.format_context(documents)
-        
+
         # Llama-3-Instruct 格式的 prompt
         prompt = f"""You are a helpful AI assistant. Answer the question based on the provided documents.
 If the documents don't contain enough information, say "I cannot answer this question based on the provided documents."
@@ -871,7 +912,7 @@ Documents:
 Question: {question}
 
 Please provide a concise and accurate answer:"""
-        
+
         try:
             # 使用 Llama-3-Instruct 的对话格式
             messages = [
