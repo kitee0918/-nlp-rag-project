@@ -1235,7 +1235,8 @@ class HallucinationEvaluator:
         api_key: str = None,
         model: str = None,
         model_path: str = None,
-        device: str = None
+        device: str = None,
+        lazy_load: bool = False
     ):
         """
         初始化幻觉评估器
@@ -1258,32 +1259,73 @@ class HallucinationEvaluator:
         self.model = model or HallucinationConfig.QWEN_MODEL
         self.model_path = model_path
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        
-        # 初始化组件
-        if generator_type == "local":
-            # 本地模式
+        self.lazy_load = lazy_load
+        self._initialized = False
+
+        if not lazy_load:
+            self._initialize_components()
+
+    def _initialize_components(self):
+        """内部方法：初始化组件（仅在需要时调用）"""
+        if self._initialized:
+            return
+
+        if self.generator_type == "local":
             self.factscore_evaluator = FActScoreLocalEvaluator(
-                model_path=model_path,
+                model_path=self.model_path,
                 device=self.device
             )
-            self.factscore_evaluator._load_model(model_path)
+            self.factscore_evaluator._load_model(self.model_path)
             self.self_rag_generator = SelfRAGGenerator(
-                retriever=retriever,
+                retriever=self.retriever,
                 generator_type="local",
-                model_path=model_path,
+                model_path=self.model_path,
                 device=self.device
             )
         else:
-            # API 模式
             self.factscore_evaluator = FActScoreEvaluator(api_key=self.api_key, model=self.model)
             self.self_rag_generator = SelfRAGGenerator(
-                retriever=retriever,
+                retriever=self.retriever,
                 api_key=self.api_key,
                 model=self.model
             )
-        
-        print(f"幻觉评估器初始化完成 (generator_type={generator_type})")
-    
+
+        self._initialized = True
+        print(f"幻觉评估器组件加载完成 (generator_type={self.generator_type})")
+
+    def ensure_initialized(self):
+        """确保组件已加载（惰性加载入口）"""
+        if not self._initialized:
+            self._initialize_components()
+
+    def cleanup(self):
+        """释放模型占用的内存/显存"""
+        if not self._initialized:
+            return
+
+        if self.generator_type == "local":
+            if hasattr(self, 'factscore_evaluator'):
+                if self.factscore_evaluator.model is not None:
+                    del self.factscore_evaluator.model
+                if self.factscore_evaluator.tokenizer is not None:
+                    del self.factscore_evaluator.tokenizer
+            if hasattr(self, 'self_rag_generator'):
+                if hasattr(self.self_rag_generator, 'local_model') and self.self_rag_generator.local_model is not None:
+                    del self.self_rag_generator.local_model
+                if hasattr(self.self_rag_generator, 'tokenizer') and self.self_rag_generator.tokenizer is not None:
+                    del self.self_rag_generator.tokenizer
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                print(f"已释放 GPU 显存，当前分配：{torch.cuda.memory_allocated() / 1024**2:.2f} MB")
+
+        self._initialized = False
+        print("幻觉评估器组件已释放")
+
+    def is_initialized(self) -> bool:
+        """检查组件是否已加载"""
+        return self._initialized
+
     def evaluate_single(
         self,
         question: str,
@@ -1307,6 +1349,9 @@ class HallucinationEvaluator:
         Returns:
             评估结果字典
         """
+        # 确保组件已加载
+        self.ensure_initialized()
+
         if verbose:
             print(f"\n{'='*60}")
             print(f"问题: {question}")
@@ -1358,6 +1403,9 @@ class HallucinationEvaluator:
         Returns:
             聚合结果
         """
+        # 确保组件已加载
+        self.ensure_initialized()
+
         all_results = []
         factscores = []
         hit_at_ks = []

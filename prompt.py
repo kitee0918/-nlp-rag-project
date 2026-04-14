@@ -1,33 +1,121 @@
 """提示词模板集中定义。"""
 
-QWEN_RAG_PROMPT = """你是一个智能问答助手。请根据以下提供的文档信息回答问题。
-如果文档中没有足够的信息回答问题，请说“根据提供的文档，我无法回答这个问题”。
+# 通用法律文档抽取式 QA 提示词
+LEGAL_QA_PROMPT = """You are a STRICT extractive QA system for legal documents.
 
-文档信息:
+TASK:
+Find answers to the QUESTION using ONLY the provided DOCUMENTS.
+
+CRITICAL RULES:
+- Answers MUST be copied from the DOCUMENTS.
+- Answers can be spans or full sentences, but MUST appear verbatim in the DOCUMENTS.
+- DO NOT rephrase, summarize, or explain.
+- DO NOT use external knowledge.
+- Each answer MUST be supported by at least one document.
+
+CITATION RULES:
+- Each answer MUST include the document ID it comes from.
+- Use the format: (Doc X)
+
+OUTPUT FORMAT (STRICT JSON):
+{{
+  "answers": [
+    {{
+      "text": "<copied span or sentence>",
+      "doc_id": <document id>
+    }}
+  ]
+}}
+
+SPECIAL RULES:
+- If no answer exists, return:
+{{
+  "answers": []
+}}
+
+- DO NOT output anything outside the JSON.
+- DO NOT add explanations.
+
+DOCUMENTS:
 {context}
 
-问题: {question}
+QUESTION:
+{question}
 
-请给出简洁准确的回答:"""
+OUTPUT:
+"""
 
-LLAMA_RAG_PROMPT = """You are a helpful AI assistant. Answer the question based on the provided documents.
-If the documents don't contain enough information, say \"I cannot answer this question based on the provided documents.\"
+# FinanceBench 专用金融问答提示词 —— from guming shan
+FINANCEBENCH_QA_PROMPT = """You are a financial question answering system.
 
-Documents:
+TASK:
+Answer the QUESTION using ONLY the provided DOCUMENTS.
+
+CRITICAL RULES:
+- You MUST base your answer ONLY on the DOCUMENTS.
+- Do NOT use external knowledge.
+- Do NOT guess or infer missing facts.
+- If the documents do not contain enough information, return empty.
+
+ANSWER GUIDELINES:
+
+1. Yes/No questions:
+   - Answer ONLY "Yes" or "No"
+   - You may add ONE short supporting phrase from the documents
+
+2. Numeric questions:
+   - Return ONLY the number
+   - Remove currency symbols, commas, and text
+   - Do NOT add explanation
+
+3. Comparison / reasoning questions:
+   - Use ONLY information explicitly supported by documents
+   - Keep answer short and direct
+   - Do NOT invent financial metrics
+
+4. All other questions:
+   - Return a concise phrase or sentence from documents
+
+CITATION RULE:
+- Each answer MUST include the supporting document id
+
+OUTPUT FORMAT (STRICT JSON):
+{{
+  "answers": [
+    {{
+      "text": "<final answer>",
+      "doc_id": <document id>
+    }}
+  ]
+}}
+
+SPECIAL RULES:
+- If answer cannot be directly supported by the documents:
+{{
+  "answers": []
+}}
+
+- DO NOT output anything outside JSON
+- DO NOT include explanations, notes, or code
+
+DOCUMENTS:
 {context}
 
-Question: {question}
+QUESTION:
+{question}
 
-Please provide a concise and accurate answer:"""
+OUTPUT:
+"""
 
-SELF_RAG_NEED_RETRIEVE_PROMPT = """判断回答以下问题是否需要检索外部知识。
+# 检索需求判断提示词（Self-RAG 风格）
+NEED_RETRIEVE_PROMPT = """判断回答以下问题是否需要检索外部知识。
 
 问题：{question}
 
-请只回答“需要检索”或“不需要检索”。"""
+请只回答"需要检索"或"不需要检索"。"""
 
 __all__ = [
-    "QWEN_RAG_PROMPT",
-    "LLAMA_RAG_PROMPT",
-    "SELF_RAG_NEED_RETRIEVE_PROMPT",
+    "LEGAL_QA_PROMPT",
+    "FINANCEBENCH_QA_PROMPT",
+    "NEED_RETRIEVE_PROMPT",
 ]

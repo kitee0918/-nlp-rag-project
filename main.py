@@ -317,6 +317,165 @@ def aggregate_all_metrics(rows: List[Dict], answer_key: str, gold_key: str) -> D
 
 
 # ============================================
+# 单一评估函数（支持惰性加载和内存释放）
+# ============================================
+
+def run_single_evaluation(
+    examples: List[Dict],
+    corpus: List[Dict],
+    evaluation_type: str,  # "llm_only", "vanilla_rag", "self_rag"
+    top_k: int = 3,
+    retriever_type: str = "bm25",
+    generator_type: str = "api",
+    model: str = "qwen-plus",
+    model_path: str = None,
+    api_key: str = None,
+    device: str = None,
+    verbose: bool = False
+) -> Dict:
+    """
+    运行单一评估（惰性加载，用完即释放）
+
+    Args:
+        examples: 测试示例
+        corpus: 文档语料库
+        evaluation_type: 评估类型，三选一
+            - "llm_only": 仅 LLM
+            - "vanilla_rag": Vanilla RAG
+            - "self_rag": Self-RAG
+        top_k: 检索文档数量
+        retriever_type: 检索器类型 ("bm25" 或 "contriever")
+        generator_type: 生成器类型，"api" 或 "local"
+        model: API 模型名称 (仅 generator_type="api" 时有效)
+        model_path: 本地模型路径 (仅 generator_type="local" 时有效)
+        api_key: DashScope API Key
+        device: 运行设备
+        verbose: 是否打印详细信息
+
+    Returns:
+        评估结果字典（与 run_comparison 返回的对应部分格式相同）
+    """
+    # 向后兼容映射
+    generator_type = GENERATOR_TYPE_MAPPING.get(generator_type.lower(), generator_type.lower())
+
+    # 设置 API Key
+    if api_key:
+        os.environ['DASHSCOPE_API_KEY'] = api_key
+
+    # 检测设备
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    print("=" * 70)
+    print(f"📊 单评估：{evaluation_type.upper()}")
+    print("=" * 70)
+    print(f"样本数量：{len(examples)}")
+    print(f"Top-K: {top_k}")
+    print(f"检索器：{retriever_type.upper()}")
+    print(f"生成器类型：{generator_type.upper()}")
+    print(f"设备：{device}")
+    print("=" * 70)
+
+    # 初始化检索器
+    os.makedirs(Config.CACHE_DIR, exist_ok=True)
+    if retriever_type.lower() == "bm25":
+        retriever = BM25Retriever(
+            corpus,
+            cache_path=os.path.join(Config.CACHE_DIR, "bm25_index_finance.pkl")
+        )
+    else:
+        retriever = ContrieverRetriever(
+            corpus,
+            cache_path=os.path.join(Config.CACHE_DIR, "contriever_embeddings_finance.pkl"),
+            device=device
+        )
+
+    results = None
+    generator = None
+    factscore_evaluator = None
+    hallucination_evaluator = None
+
+    try:
+        if evaluation_type == "llm_only":
+            print("\n🔹 运行 LLM Only 评估...")
+            if generator_type == "local":
+                generator = LlamaGenerator(
+                    model_path=model_path or Config.LLAMA_MODEL_PATH,
+                    device=device
+                )
+                factscore_evaluator = FActScoreLocalEvaluator(
+                    model_path=model_path or Config.LLAMA_MODEL_PATH,
+                    device=device
+                )
+                factscore_evaluator._load_model(model_path or Config.LLAMA_MODEL_PATH)
+            else:
+                generator = QwenGenerator(model=model)
+                factscore_evaluator = FActScoreEvaluator(model=model)
+
+            results = evaluate_llm_only(examples, generator, factscore_evaluator, verbose=verbose)
+
+        elif evaluation_type == "vanilla_rag":
+            print("\n🔹 运行 Vanilla RAG 评估...")
+            if generator_type == "local":
+                generator = LlamaGenerator(
+                    model_path=model_path or Config.LLAMA_MODEL_PATH,
+                    device=device
+                )
+                factscore_evaluator = FActScoreLocalEvaluator(
+                    model_path=model_path or Config.LLAMA_MODEL_PATH,
+                    device=device
+                )
+                factscore_evaluator._load_model(model_path or Config.LLAMA_MODEL_PATH)
+            else:
+                generator = QwenGenerator(model=model)
+                factscore_evaluator = FActScoreEvaluator(model=model)
+
+            rag_system = RAGSystem(retriever, generator, top_k=top_k)
+            results = evaluate_vanilla_rag(rag_system, examples, factscore_evaluator, top_k=top_k, verbose=verbose)
+
+        elif evaluation_type == "self_rag":
+            print("\n🔹 运行 Self-RAG 评估...")
+            # 使用惰性加载模式
+            hallucination_evaluator = HallucinationEvaluator(
+                retriever=retriever,
+                generator_type=generator_type,
+                model=model,
+                model_path=model_path,
+                device=device,
+                lazy_load=True  # 惰性加载
+            )
+            results = evaluate_self_rag(examples, hallucination_evaluator, top_k=top_k, verbose=verbose)
+        else:
+            raise ValueError(f"未知的评估类型：{evaluation_type}")
+
+        # 打印结果摘要
+        print(f"\n{evaluation_type.upper()} 结果:")
+        print(f"  FActScore:    {results['avg_factscore']:.4f}")
+        print(f"  Hit@K:        {results['avg_hit_at_k']:.4f}")
+        print(f"  F1 Score:     {results['avg_f1']:.4f}")
+        print(f"  Gen EM:       {results['avg_gen_em']:.4f}")
+        print(f"  Ret EM:       {results['avg_ret_em']:.4f}")
+
+        return results
+
+    finally:
+        # 释放资源
+        print("\n🧹 清理资源...")
+        if hallucination_evaluator is not None:
+            hallucination_evaluator.cleanup()
+        if generator is not None and hasattr(generator, 'model') and generator.model is not None:
+            del generator.model
+            del generator.tokenizer
+        if factscore_evaluator is not None and hasattr(factscore_evaluator, 'model') and factscore_evaluator.model is not None:
+            del factscore_evaluator.model
+            del factscore_evaluator.tokenizer
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            print(f"GPU 显存已清空，当前分配：{torch.cuda.memory_allocated() / 1024**2:.2f} MB")
+        print("✅ 资源清理完成")
+
+
+# ============================================
 # 对比实验
 # ============================================
 
