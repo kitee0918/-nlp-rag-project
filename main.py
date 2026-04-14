@@ -13,6 +13,10 @@
 import os
 import sys
 
+# API 配置常量
+API_KEY = "sk-d1a2d27081934dd9b556b327869bb7cc"
+MODEL_NAME = "qwen2.5-7b-instruct-1m"
+
 # ============================================
 # 重要：在导入任何其他模块之前设置镜像站点
 # HuggingFace 镜像需要在 datasets 模块导入前设置才能生效
@@ -70,7 +74,7 @@ from eval import (
 # 向后兼容映射
 GENERATOR_TYPE_MAPPING = {
     "qwen": "api",
-    "llama": "local"
+    "llama": "api"  # 将llama也映射到api，使用qwen模型
 }
 
 
@@ -361,6 +365,8 @@ def run_single_evaluation(
     # 设置 API Key
     if api_key:
         os.environ['DASHSCOPE_API_KEY'] = api_key
+    else:
+        os.environ['DASHSCOPE_API_KEY'] = API_KEY
 
     # 检测设备
     if device is None:
@@ -398,24 +404,9 @@ def run_single_evaluation(
     try:
         if evaluation_type == "llm_only":
             print("\n🔹 运行 LLM Only 评估...")
-            if generator_type == "local":
-                # 使用懒加载和 4bit 量化（完全在GPU上）
-                generator = LLMGenerator(
-                    model_path=model_path or Config.LLAMA_MODEL_PATH,
-                    device=device,
-                    lazy_load=True,  # 启用懒加载
-                    load_in_8bit=False,  # 不使用 8bit 量化
-                    load_in_4bit=True  # 使用 4bit 量化
-                )
-                factscore_evaluator = FActScoreLocalEvaluator(
-                    model_path=model_path or Config.LLAMA_MODEL_PATH,
-                    device=device,
-                    lazy_load=True,  # 启用懒加载
-                    load_in_4bit=True  # 使用 4bit 量化
-                )
-            else:
-                generator = QwenGenerator(model=model)
-                factscore_evaluator = FActScoreEvaluator(model=model)
+            # 强制使用 API
+            generator = QwenGenerator(model=model or MODEL_NAME)
+            factscore_evaluator = FActScoreEvaluator(model=model or MODEL_NAME)
 
             # 确保在评估前初始化（如果支持懒加载）
             if hasattr(generator, 'ensure_initialized'):
@@ -427,24 +418,9 @@ def run_single_evaluation(
 
         elif evaluation_type == "vanilla_rag":
             print("\n🔹 运行 Vanilla RAG 评估...")
-            if generator_type == "local":
-                # 使用懒加载和 4bit 量化（完全在GPU上）
-                generator = LLMGenerator(
-                    model_path=model_path or Config.LLAMA_MODEL_PATH,
-                    device=device,
-                    lazy_load=True,  # 启用懒加载
-                    load_in_8bit=False,  # 不使用 8bit 量化
-                    load_in_4bit=True  # 使用 4bit 量化
-                )
-                factscore_evaluator = FActScoreLocalEvaluator(
-                    model_path=model_path or Config.LLAMA_MODEL_PATH,
-                    device=device,
-                    lazy_load=True,  # 启用懒加载
-                    load_in_4bit=True  # 使用 4bit 量化
-                )
-            else:
-                generator = QwenGenerator(model=model)
-                factscore_evaluator = FActScoreEvaluator(model=model)
+            # 强制使用 API
+            generator = QwenGenerator(model=model or MODEL_NAME)
+            factscore_evaluator = FActScoreEvaluator(model=model or MODEL_NAME)
 
             # 确保在评估前初始化（如果支持懒加载）
             if hasattr(generator, 'ensure_initialized'):
@@ -457,12 +433,12 @@ def run_single_evaluation(
 
         elif evaluation_type == "self_rag":
             print("\n🔹 运行 Self-RAG 评估...")
-            # 使用惰性加载模式
+            # 强制使用 API
             hallucination_evaluator = HallucinationEvaluator(
                 retriever=retriever,
-                generator_type=generator_type,
-                model=model,
-                model_path=model_path,
+                generator_type="api",  # 强制使用API
+                model=model or MODEL_NAME,
+                model_path=None,  # 不使用本地路径
                 device=device,
                 lazy_load=True  # 惰性加载
             )
@@ -546,6 +522,8 @@ def run_comparison(
     # 设置 API Key
     if api_key:
         os.environ['DASHSCOPE_API_KEY'] = api_key
+    else:
+        os.environ['DASHSCOPE_API_KEY'] = API_KEY
     
     # 检测设备
     if device is None:
@@ -588,32 +566,16 @@ def run_comparison(
     # 3. 初始化评估组件
     print("\n🤖 初始化评估组件...")
     
-    # Vanilla RAG 生成器
-    if generator_type == "local":
-        vanilla_generator = LLMGenerator(
-            model_path=model_path or Config.LLAMA_MODEL_PATH,
-            device=device,
-            load_in_8bit=False,  # 不使用 8bit 量化
-            load_in_4bit=True  # 使用 4bit 量化
-        )
-        # 本地模型使用 FActScoreLocalEvaluator
-        factscore_evaluator = FActScoreLocalEvaluator(
-            model_path=model_path or Config.LLAMA_MODEL_PATH,
-            device=device,
-            load_in_4bit=True  # 使用 4bit 量化
-        )
-        # 加载本地模型
-        factscore_evaluator._load_model(model_path or Config.LLAMA_MODEL_PATH)
-    else:
-        vanilla_generator = QwenGenerator(model=model)
-        factscore_evaluator = FActScoreEvaluator(model=model)
+    # Vanilla RAG 生成器 - 强制使用 API
+    vanilla_generator = QwenGenerator(model=model or MODEL_NAME)
+    factscore_evaluator = FActScoreEvaluator(model=model or MODEL_NAME)
     
-    # Self-RAG 幻觉评估器
+    # Self-RAG 幻觉评估器 - 强制使用 API
     hallucination_evaluator = HallucinationEvaluator(
         retriever=retriever,
-        generator_type=generator_type,
-        model=model,
-        model_path=model_path,
+        generator_type="api",  # 强制使用API
+        model=model or MODEL_NAME,
+        model_path=None,  # 不使用本地路径
         device=device
     )
     
