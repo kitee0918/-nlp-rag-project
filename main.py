@@ -399,16 +399,18 @@ def run_single_evaluation(
         if evaluation_type == "llm_only":
             print("\n🔹 运行 LLM Only 评估...")
             if generator_type == "local":
-                # 使用懒加载
+                # 使用懒加载和 4bit 量化
                 generator = LlamaGenerator(
                     model_path=model_path or Config.LLAMA_MODEL_PATH,
                     device=device,
-                    lazy_load=True  # 启用懒加载
+                    lazy_load=True,  # 启用懒加载
+                    load_in_4bit=True  # 使用 4bit 量化
                 )
                 factscore_evaluator = FActScoreLocalEvaluator(
                     model_path=model_path or Config.LLAMA_MODEL_PATH,
                     device=device,
-                    lazy_load=True  # 启用懒加载
+                    lazy_load=True,  # 启用懒加载
+                    load_in_4bit=True  # 使用 4bit 量化
                 )
             else:
                 generator = QwenGenerator(model=model)
@@ -425,16 +427,18 @@ def run_single_evaluation(
         elif evaluation_type == "vanilla_rag":
             print("\n🔹 运行 Vanilla RAG 评估...")
             if generator_type == "local":
-                # 使用懒加载
+                # 使用懒加载和 4bit 量化
                 generator = LlamaGenerator(
                     model_path=model_path or Config.LLAMA_MODEL_PATH,
                     device=device,
-                    lazy_load=True  # 启用懒加载
+                    lazy_load=True,  # 启用懒加载
+                    load_in_4bit=True  # 使用 4bit 量化
                 )
                 factscore_evaluator = FActScoreLocalEvaluator(
                     model_path=model_path or Config.LLAMA_MODEL_PATH,
                     device=device,
-                    lazy_load=True  # 启用懒加载
+                    lazy_load=True,  # 启用懒加载
+                    load_in_4bit=True  # 使用 4bit 量化
                 )
             else:
                 generator = QwenGenerator(model=model)
@@ -586,12 +590,14 @@ def run_comparison(
     if generator_type == "local":
         vanilla_generator = LlamaGenerator(
             model_path=model_path or Config.LLAMA_MODEL_PATH,
-            device=device
+            device=device,
+            load_in_4bit=True  # 使用 4bit 量化
         )
         # 本地模型使用 FActScoreLocalEvaluator
         factscore_evaluator = FActScoreLocalEvaluator(
             model_path=model_path or Config.LLAMA_MODEL_PATH,
-            device=device
+            device=device,
+            load_in_4bit=True  # 使用 4bit 量化
         )
         # 加载本地模型
         factscore_evaluator._load_model(model_path or Config.LLAMA_MODEL_PATH)

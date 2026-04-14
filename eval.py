@@ -600,7 +600,7 @@ class FActScoreLocalEvaluator:
     优势：无需 API 调用，更快更省钱
     """
     
-    def __init__(self, model_path: str = None, device: str = None, lazy_load: bool = False):
+    def __init__(self, model_path: str = None, device: str = None, lazy_load: bool = False, load_in_4bit: bool = True):
         """
         初始化本地模型 FActScore 评估器
 
@@ -608,12 +608,14 @@ class FActScoreLocalEvaluator:
             model_path: 本地模型路径（如果为 None，需要后续设置）
             device: 运行设备
             lazy_load: 是否使用懒加载（默认 False，保持向后兼容）
+            load_in_4bit: 是否使用 4bit 量化（默认 True）
         """
         self.model = None
         self.tokenizer = None
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.model_path = model_path
         self._initialized = False
+        self.load_in_4bit = load_in_4bit
 
         if not lazy_load and model_path and os.path.exists(model_path):
             self._load_model(model_path)
@@ -622,18 +624,36 @@ class FActScoreLocalEvaluator:
     def _load_model(self, model_path: str):
         """加载本地模型"""
         print(f"加载本地模型: {model_path}")
-        
+
+        # 加载 tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+
+        # 量化配置
+        quantization_config = None
+        if self.load_in_4bit:
+            from transformers import BitsAndBytesConfig
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_quant_type="nf4"
+            )
+            print("使用 4bit 量化")
+        else:
+            print("使用全精度 (FP16)")
+
+        # 加载模型
         self.model = AutoModelForCausalLM.from_pretrained(
             model_path,
             torch_dtype=torch.float16,
-            device_map="auto"
+            device_map="auto",
+            quantization_config=quantization_config
         )
         self.model.eval()
-        
+
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
-        
+
         print("✅ 本地模型加载完成")
         self._initialized = True
 

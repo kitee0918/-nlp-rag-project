@@ -751,8 +751,8 @@ class LlamaGenerator:
         self,
         model_path: str = None,
         device: str = None,
-        load_in_8bit: bool = True,
-        load_in_4bit: bool = False,
+        load_in_8bit: bool = False,
+        load_in_4bit: bool = True,
         lazy_load: bool = False
     ):
         """
