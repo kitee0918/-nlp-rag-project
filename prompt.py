@@ -114,6 +114,26 @@ NEED_RETRIEVE_PROMPT = """判断回答以下问题是否需要检索外部知识
 
 请只回答"需要检索"或"不需要检索"。"""
 
+
+# 导入 FinanceBench 提示词模板
+def build_prompt_financebench(question, docs=None):
+    if docs is None:
+        context = "NO DOCUMENTS PROVIDED"
+    else:
+        context = "\n\n".join(
+            [f"[Doc {d['id']}] {d['text']}" for d in docs]
+        )
+    
+    # 替换模板中的占位符
+    prompt = FINANCEBENCH_QA_PROMPT.format(
+        context=context,
+        question=question
+    )
+    return prompt
+
+
+
+
 __all__ = [
     "LEGAL_QA_PROMPT",
     "FINANCEBENCH_QA_PROMPT",

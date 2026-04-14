@@ -20,6 +20,9 @@ wheels/
 .installed.cfg
 *.egg
 
+# Temporary/scratchpad files
+prompt_s.py
+
 # Virtual environments
 venv/
 ENV/
