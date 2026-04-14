@@ -468,7 +468,7 @@ def run_single_evaluation(
             # 否则手动清理
             elif hasattr(generator, 'model') and generator.model is not None:
                 del generator.model
-                del generator.tokenizer
+            # QwenGenerator 没有 tokenizer 属性，跳过删除
         if factscore_evaluator is not None:
             # 如果支持 cleanup 方法，使用它
             if hasattr(factscore_evaluator, 'cleanup'):
@@ -476,7 +476,7 @@ def run_single_evaluation(
             # 否则手动清理
             elif hasattr(factscore_evaluator, 'model') and factscore_evaluator.model is not None:
                 del factscore_evaluator.model
-                del factscore_evaluator.tokenizer
+            # FActScoreEvaluator 没有 tokenizer 属性，跳过删除
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             print(f"GPU 显存已清空，当前分配：{torch.cuda.memory_allocated() / 1024**2:.2f} MB")
