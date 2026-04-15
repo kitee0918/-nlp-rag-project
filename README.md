@@ -15,8 +15,8 @@
 ## 功能
 
 - FinanceBench RAG 实验（BM25 / Contriever）
-- LLM Only / Vanilla RAG / Self-RAG 幻觉评测对比
-- FActScore、Hit@K、F1、Gen EM、Ret EM、citation / hallucination 等指标
+- LLM Only / Vanilla RAG 检索-生成交互对比
+- Hit@K、F1、Gen EM、Ret EM 等评估指标
 
 ## 环境
 
@@ -57,6 +57,6 @@ git -C /content/-nlp-rag-project pull origin merged_finance
 - `methods.py`：主流程与实验方法（含 `release_contriever_gpu`）
 - `retriever.py`：检索类导出
 - `llm.py`：生成器类导出
-- `eval.py`：幻觉与事实性评估（含 `evaluate_all_metrics`）
+- `eval.py`：评估模块（含 `evaluate_all_metrics`）
 - `prompt.py`：集中管理提示词模板
 

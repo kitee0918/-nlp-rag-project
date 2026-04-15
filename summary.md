@@ -7,14 +7,13 @@
 
 ## 一、项目概述
 
-本项目是一个基于 **FinanceBench** 数据集的 RAG（检索增强生成）系统，专注于金融领域的问答任务。项目支持多种检索方法和生成模型，并实现了幻觉缓解的对比实验。
+本项目是一个基于 **FinanceBench** 数据集的 RAG（检索增强生成）系统，专注于金融领域的问答任务。项目支持多种检索方法和生成模型，实现了检索-生成交互的对比实验。
 
 ### 核心功能
 
 - 金融问答（FinanceBench 数据集，150 条金融问答）
 - 多检索器支持（BM25 稀疏检索、Contriever 稠密检索）
 - 多生成器支持（阿里百炼 API、本地 Llama 模型）
-- 幻觉评估（FActScore、Self-RAG）
 - 检索-生成对比实验
 
 ---
@@ -24,15 +23,15 @@
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         main.py (主执行入口)                      │
-│    幻觉缓解对比实验：LLM Only / Vanilla RAG / Self-RAG           │
+│              检索-生成交互实验：LLM Only / Vanilla RAG            │
 └───────────────────────────┬─────────────────────────────────────┘
                             │
          ┌──────────────────┼──────────────────┐
          │                  │                  │
          ▼                  ▼                  ▼
 ┌─────────────┐    ┌─────────────────┐    ┌─────────────┐
-│  eval.py    │    │   methods.py    │    │  prompt.py  │
-│ 幻觉评估模块  │◄──│  核心RAG实现     │───►│ 提示词模板   │
+│   eval.py   │    │   methods.py    │    │  prompt.py  │
+│  评估模块    │◄──│  核心RAG实现     │───►│ 提示词模板   │
 └─────────────┘    └────────┬────────┘    └─────────────┘
          │                   │
          │         ┌────────┴────────┐
@@ -106,51 +105,35 @@ class Generator:
 |------|------|
 | `LEGAL_QA_PROMPT` | 法律文档抽取式 QA |
 | `FINANCEBENCH_QA_PROMPT` | 金融问答（严格 JSON 输出） |
-| `NEED_RETRIEVE_PROMPT` | Self-RAG 检索判断 |
 
-### 3.5 eval.py - 幻觉评估模块
+### 3.5 eval.py - 评估模块
 
-**职责**：提供幻觉评估能力，包括 FActScore 评估、Self-RAG 生成、综合评估指标。
+**职责**：提供评估能力，包括检索评估、生成评估、综合评估指标。
 
 | 组件 | 功能 |
 |------|------|
 | `normalise()`, `split_claims()` | 文本标准化、声明分割 |
 | `retrieval_em()`, `recall_at_k()` | 检索精确匹配、召回率 |
 | `generation_em()`, `generation_f1()` | 生成精确匹配、F1 |
-| `hallucination_rate()`, `factscore_simple()` | 幻觉率、简化 FActScore |
 | `evaluate_all_metrics()` | 一次调用计算所有指标 |
-| `FActScoreEvaluator` | 原子事实评估（API 版本） |
-| `FActScoreLocalEvaluator` | 原子事实评估（本地版本） |
-| `SelfRAGGenerator` | Prompt 引导的自适应 RAG |
-| `HallucinationEvaluator` | 协调多种评估方法 |
-
-**Self-RAG 流程**：
-```
-[Retrieve] → [IsREL] → [IsSUP] → [IsUSE]
-    ↓           ↓          ↓         ↓
-  判断是否需要   判断文档    判断答案   判断有用性
-    检索       是否相关    是否被支持
-```
 
 ### 3.6 main.py - 主执行脚本
 
-**职责**：幻觉缓解对比实验的入口，协调三种方法的评估。
+**职责**：检索-生成交互实验的入口，协调多种方法的评估。
 
 | 函数 | 功能 |
 |------|------|
 | `evaluate_llm_only()` | 评估纯 LLM（无检索） |
 | `evaluate_vanilla_rag()` | 评估标准 RAG |
-| `evaluate_self_rag()` | 评估 Self-RAG |
-| `run_comparison()` | **核心入口**：对比三种方法 |
+| `run_comparison()` | **核心入口**：对比多种方法 |
 | `run_single_evaluation()` | 单一评估（支持惰性加载） |
 
 **输出指标矩阵**：
 
-| 方法 | FActScore | Hit@K | Gen EM | Ret EM |
-|------|-----------|-------|--------|--------|
-| LLM Only | - | 0.0 | - | 0.0 |
+| 方法 | Hit@K | Gen EM | Ret EM | F1 |
+|------|-------|--------|--------|-----|
+| LLM Only | 0.0 | - | 0.0 | - |
 | VanillaRAG | - | - | - | - |
-| Self-RAG | - | - | - | - |
 
 ---
 
@@ -164,9 +147,7 @@ class Generator:
 | Contriever 稠密检索 | `methods.py` → `ContrieverRetriever` | ✅ 完成 |
 | 阿里百炼 API 生成 | `methods.py` → `QwenGenerator` | ✅ 完成 |
 | 本地 Llama 生成 | `methods.py` → `LLMGenerator` | ✅ 完成 |
-| FActScore 评估 | `eval.py` → `FActScoreEvaluator` | ✅ 完成 |
-| Self-RAG 生成 | `eval.py` → `SelfRAGGenerator` | ✅ 完成 |
-| 三种方法对比实验 | `main.py` → `run_comparison()` | ✅ 完成 |
+| 多方法对比实验 | `main.py` → `run_comparison()` | ✅ 完成 |
 | 检索缓存机制 | `methods.py` 各检索器 | ✅ 完成 |
 | 4bit/8bit 量化 | `methods.py` → `LLMGenerator` | ✅ 完成 |
 | 惰性加载 | 各组件 `lazy_load` 参数 | ✅ 完成 |
@@ -269,9 +250,9 @@ def reciprocal_rank_fusion(
 |------|----------|
 | **工厂模式** | `create_generator()` 统一创建生成器 |
 | **策略模式** | 不同检索器/生成器实现统一接口，可互换 |
-| **门面模式** | `RAGSystem`、`HallucinationEvaluator` 封装复杂流程 |
-| **懒加载模式** | `LLMGenerator`、`HallucinationEvaluator` 支持 `lazy_load=True` |
-| **模板方法模式** | `evaluate_vanilla_rag()`、`evaluate_self_rag()` 遵循统一评估流程 |
+| **门面模式** | `RAGSystem` 封装复杂流程 |
+| **懒加载模式** | `LLMGenerator` 支持 `lazy_load=True` |
+| **模板方法模式** | `evaluate_vanilla_rag()` 遵循统一评估流程 |
 
 ---
 
@@ -282,14 +263,12 @@ main.py
   ├── 导入 methods.py: load_financebench, BM25Retriever, ContrieverRetriever, 
   │                   QwenGenerator, LLMGenerator, RAGSystem, compute_f1...
   │
-  └── 导入 eval.py: FActScoreEvaluator, FActScoreLocalEvaluator,
-                    SelfRAGGenerator, HallucinationEvaluator,
-                    generation_em, retrieval_em, evaluate_all_metrics...
+  └── 导入 eval.py: generation_em, retrieval_em, evaluate_all_metrics...
 
 eval.py
   ├── 导入 transformers: AutoTokenizer, AutoModelForCausalLM
   ├── 导入 openai: OpenAI (用于 API 调用)
-  └── 独立实现幻觉评估逻辑
+  └── 独立实现评估逻辑
 
 llm.py       → 导出 methods.py 中的生成器类
 retriever.py → 导出 methods.py 中的检索器类
@@ -316,10 +295,6 @@ prompt.py    → 独立模块，被其他模块按需导入
 3. **参数配置优化**
    - 将 RRF 的 k 参数加入 `Config` 类
    - 支持命令行参数 `--hybrid-k`
-
-4. **文档完善**
-   - 添加混合检索的使用示例
-   - 更新 README.md
 
 ---
 
