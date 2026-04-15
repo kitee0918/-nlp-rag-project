@@ -47,6 +47,10 @@ cache/
 # Results (optional - comment out if you want to track)
 # results/
 
+# Reports and experiment data
+report/
+data/
+
 # Environment variables
 .env
 .env.local
