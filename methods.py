@@ -89,6 +89,7 @@ class Config:
     
     # 检索配置
     RETRIEVAL_K = 3  # 每次检索返回 top-k 文档
+    RRF_K = 60  # Reciprocal Rank Fusion 平滑参数
     
     # 模型配置
     CONTRIEVER_MODEL = "facebook/contriever-msmarco"
@@ -572,6 +573,216 @@ class ContrieverRetriever:
     
     def get_name(self) -> str:
         return "Contriever"
+
+
+# ============================================
+# Reciprocal Rank Fusion 算法
+# ============================================
+
+def reciprocal_rank_fusion(
+    rankings_list: List[List[Tuple[Dict, float]]],
+    k: int = 60
+) -> List[Tuple[Dict, float]]:
+    """
+    Reciprocal Rank Fusion (RRF) 算法
+    
+    将多个检索器的结果通过 RRF 公式融合，得到统一的排序列表。
+    RRF 能够有效结合不同检索器的优势，无需依赖原始分数的归一化。
+    
+    公式: RRF_score(d) = \sum_{r \in R} 1/(k + rank_r(d))
+    
+    Args:
+        rankings_list: 多个检索器的排序列表，每个元素为 List[Tuple[Dict, float]]
+                       其中 Dict 是文档对象，float 是原始分数
+        k: 平滑参数，默认 60。较大的 k 会降低排名差异的影响
+    
+    Returns:
+        融合后的排序列表，格式为 List[Tuple[Dict, float]]
+        其中 float 为融合后的 RRF 分数
+    
+    Reference:
+        Cormack, G. V., Clarke, C. L. A., & Buettcher, S. (2009).
+        Reciprocal rank fusion outperforms condorcet and individual rank learning methods.
+        SIGIR '09.
+    """
+    doc_scores = {}
+    doc_info = {}
+    
+    for ranking in rankings_list:
+        for rank, (doc, score) in enumerate(ranking, start=1):
+            # 使用文档 ID 作为唯一标识
+            doc_id = doc['id']
+            
+            # 计算 RRF 分数
+            rrf_score = 1.0 / (k + rank)
+            
+            # 累加分数
+            doc_scores[doc_id] = doc_scores.get(doc_id, 0) + rrf_score
+            
+            # 保存文档信息（只保存第一次出现的完整信息）
+            if doc_id not in doc_info:
+                doc_info[doc_id] = doc
+    
+    # 按融合分数降序排序
+    sorted_docs = sorted(doc_scores.items(), key=lambda x: x[1], reverse=True)
+    
+    # 返回格式与单个检索器一致
+    return [(doc_info[doc_id], score) for doc_id, score in sorted_docs]
+
+
+# ============================================
+# Hybrid RRF 混合检索器
+# ============================================
+
+class HybridRRFRetriever:
+    """
+    Hybrid RRF 混合检索器
+    
+    整合 BM25 (稀疏检索) 和 Contriever (稠密检索) 的检索结果，
+    通过 Reciprocal Rank Fusion (RRF) 算法融合，覆盖词汇和语义两个维度。
+    
+    优势:
+    - BM25: 擅长精确词汇匹配，对关键词检索效果好
+    - Contriever: 擅长语义理解，能找到同义表达
+    - RRF 融合: 无需分数归一化，直接基于排名融合
+    
+    使用示例:
+        # 方式1: 自动初始化子检索器
+        hybrid = HybridRRFRetriever(
+            documents=corpus,
+            cache_dir="./cache",
+            device="cuda"
+        )
+        
+        # 方式2: 使用已初始化的子检索器
+        bm25 = BM25Retriever(corpus)
+        contriever = ContrieverRetriever(corpus)
+        hybrid = HybridRRFRetriever(
+            documents=corpus,
+            bm25_retriever=bm25,
+            contriever_retriever=contriever
+        )
+        
+        # 检索
+        results = hybrid.retrieve("What was Apple's revenue?", top_k=3)
+    """
+    
+    def __init__(
+        self,
+        documents: List[Dict],
+        bm25_retriever: Optional[BM25Retriever] = None,
+        contriever_retriever: Optional[ContrieverRetriever] = None,
+        cache_dir: Optional[str] = None,
+        rrf_k: int = None,
+        device: str = "cuda",
+        model_name: str = None
+    ):
+        """
+        初始化 Hybrid RRF 混合检索器
+        
+        Args:
+            documents: 文档列表，每个文档包含 'id', 'text' 等字段
+            bm25_retriever: 已初始化的 BM25 检索器（可选，如未提供则自动创建）
+            contriever_retriever: 已初始化的 Contriever 检索器（可选，如未提供则自动创建）
+            cache_dir: 缓存目录路径
+            rrf_k: RRF 算法的平滑参数，默认使用 Config.RRF_K (60)
+            device: Contriever 运行设备
+            model_name: Contriever 模型名称
+        """
+        self.documents = documents
+        self.rrf_k = rrf_k if rrf_k is not None else Config.RRF_K
+        self.cache_dir = cache_dir or Config.CACHE_DIR
+        self.device = device
+        self.model_name = model_name or Config.CONTRIEVER_MODEL
+        
+        # 确保缓存目录存在
+        if self.cache_dir:
+            os.makedirs(self.cache_dir, exist_ok=True)
+        
+        # 初始化或使用传入的子检索器
+        if bm25_retriever is not None:
+            self.bm25_retriever = bm25_retriever
+            print("[HybridRRF] 使用传入的 BM25 检索器")
+        else:
+            print("[HybridRRF] 初始化 BM25 检索器...")
+            bm25_cache = os.path.join(self.cache_dir, "bm25_index_finance.pkl") if self.cache_dir else None
+            self.bm25_retriever = BM25Retriever(documents, cache_path=bm25_cache)
+        
+        if contriever_retriever is not None:
+            self.contriever_retriever = contriever_retriever
+            print("[HybridRRF] 使用传入的 Contriever 检索器")
+        else:
+            print("[HybridRRF] 初始化 Contriever 检索器...")
+            contriever_cache = os.path.join(self.cache_dir, "contriever_embeddings_finance.pkl") if self.cache_dir else None
+            self.contriever_retriever = ContrieverRetriever(
+                documents,
+                model_name=self.model_name,
+                cache_path=contriever_cache,
+                device=device
+            )
+        
+        print(f"[HybridRRF] 混合检索器初始化完成 (RRF k={self.rrf_k})")
+    
+    def retrieve(self, query: str, top_k: int = 3) -> List[Tuple[Dict, float]]:
+        """
+        使用混合检索策略检索 top-k 相关文档
+        
+        流程:
+        1. BM25 检索 top-k 文档
+        2. Contriever 检索 top-k 文档
+        3. 使用 RRF 算法融合两个排序列表
+        4. 返回融合后的 top-k 文档
+        
+        Args:
+            query: 查询字符串
+            top_k: 返回文档数量
+            
+        Returns:
+            List of (document, rrf_score) tuples
+        """
+        # 从两个检索器获取结果（获取更多文档以进行融合，然后截取 top_k）
+        # 为了更好的融合效果，每个检索器获取 top_k * 2 个文档
+        fetch_k = top_k * 2
+        
+        # BM25 检索
+        bm25_results = self.bm25_retriever.retrieve(query, top_k=fetch_k)
+        
+        # Contriever 检索
+        contriever_results = self.contriever_retriever.retrieve(query, top_k=fetch_k)
+        
+        # RRF 融合
+        fused_results = reciprocal_rank_fusion(
+            [bm25_results, contriever_results],
+            k=self.rrf_k
+        )
+        
+        # 截取 top_k 结果
+        return fused_results[:top_k]
+    
+    
+    def get_name(self) -> str:
+        return f"HybridRRF(k={self.rrf_k})"
+    
+    def get_individual_results(self, query: str, top_k: int = 3) -> Dict[str, List[Tuple[Dict, float]]]:
+        """
+        获取两个子检索器的独立结果（用于对比分析）
+        
+        Args:
+            query: 查询字符串
+            top_k: 返回文档数量
+            
+        Returns:
+            包含 'bm25', 'contriever', 'hybrid' 三个键的字典
+        """
+        bm25_results = self.bm25_retriever.retrieve(query, top_k=top_k)
+        contriever_results = self.contriever_retriever.retrieve(query, top_k=top_k)
+        hybrid_results = self.retrieve(query, top_k=top_k)
+        
+        return {
+            'bm25': bm25_results,
+            'contriever': contriever_results,
+            'hybrid': hybrid_results
+        }
 
 
 # ============================================
