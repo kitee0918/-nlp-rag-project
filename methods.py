@@ -589,7 +589,7 @@ def reciprocal_rank_fusion(
     将多个检索器的结果通过 RRF 公式融合，得到统一的排序列表。
     RRF 能够有效结合不同检索器的优势，无需依赖原始分数的归一化。
     
-    公式: RRF_score(d) = \sum_{r \in R} 1/(k + rank_r(d))
+    公式: RRF_score(d) = \\sum_{r \\in R} 1/(k + rank_r(d))
     
     Args:
         rankings_list: 多个检索器的排序列表，每个元素为 List[Tuple[Dict, float]]
@@ -722,26 +722,66 @@ class HybridRRFRetriever:
             )
         
         print(f"[HybridRRF] 混合检索器初始化完成 (RRF k={self.rrf_k})")
+        
+        # 初始化检索结果缓存
+        self._retrieval_cache = None
     
-    def retrieve(self, query: str, top_k: int = 3) -> List[Tuple[Dict, float]]:
+    def set_retrieval_cache(self, cache: Dict[str, Dict[str, List[Tuple[Dict, float]]]]):
+        """
+        设置检索结果缓存（用于复用已计算的检索结果）
+        
+        使用场景：在对比实验中，BM25 和 Contriever 的检索结果已被计算，
+        通过设置缓存，HybridRRFRetriever 可以直接使用这些结果进行融合，
+        无需重复执行检索。
+        
+        Args:
+            cache: 检索结果缓存，格式为:
+                {
+                    "bm25": {"query1": [(doc, score), ...], "query2": [...], ...},
+                    "contriever": {"query1": [(doc, score), ...], "query2": [...], ...}
+                }
+        """
+        self._retrieval_cache = cache
+        print(f"[HybridRRF] 已设置检索结果缓存 ({len(cache.get('bm25', {}))} 个查询)")
+    
+    def clear_retrieval_cache(self):
+        """清除检索结果缓存"""
+        self._retrieval_cache = None
+        print("[HybridRRF] 已清除检索结果缓存")
+    
+    def retrieve(self, query: str, top_k: int = 3, use_cache: bool = True) -> List[Tuple[Dict, float]]:
         """
         使用混合检索策略检索 top-k 相关文档
         
         流程:
-        1. BM25 检索 top-k 文档
-        2. Contriever 检索 top-k 文档
-        3. 使用 RRF 算法融合两个排序列表
-        4. 返回融合后的 top-k 文档
+        1. 检查是否有缓存的检索结果（如果 use_cache=True）
+        2. 如果有缓存，直接使用缓存结果进行融合
+        3. 如果没有缓存，执行 BM25 和 Contriever 检索
+        4. 使用 RRF 算法融合两个排序列表
+        5. 返回融合后的 top-k 文档
         
         Args:
             query: 查询字符串
             top_k: 返回文档数量
+            use_cache: 是否使用缓存的检索结果（默认 True）
             
         Returns:
             List of (document, rrf_score) tuples
         """
-        # 从两个检索器获取结果（获取更多文档以进行融合，然后截取 top_k）
-        # 为了更好的融合效果，每个检索器获取 top_k * 2 个文档
+        # 检查是否有缓存的检索结果
+        if use_cache and self._retrieval_cache is not None:
+            cache = self._retrieval_cache
+            if query in cache.get('bm25', {}) and query in cache.get('contriever', {}):
+                # 使用缓存的检索结果进行融合
+                bm25_results = cache['bm25'][query]
+                contriever_results = cache['contriever'][query]
+                fused_results = reciprocal_rank_fusion(
+                    [bm25_results, contriever_results],
+                    k=self.rrf_k
+                )
+                return fused_results[:top_k]
+        
+        # 没有缓存，执行正常检索流程
         fetch_k = top_k * 2
         
         # BM25 检索
@@ -762,6 +802,46 @@ class HybridRRFRetriever:
     
     def get_name(self) -> str:
         return f"HybridRRF(k={self.rrf_k})"
+    
+    @staticmethod
+    def fuse_results(
+        bm25_results: List[Tuple[Dict, float]],
+        contriever_results: List[Tuple[Dict, float]],
+        k: int = 60,
+        top_k: int = 3
+    ) -> List[Tuple[Dict, float]]:
+        """
+        静态方法：直接融合已有的 BM25 和 Contriever 检索结果
+        
+        使用场景：
+        - 在对比实验中，BM25 和 Contriever 的结果已被计算
+        - 需要额外生成 Hybrid RRF 融合结果时，无需重复检索
+        - 批量评估时复用已计算的检索结果
+        
+        Args:
+            bm25_results: BM25 检索结果，格式为 List[Tuple[Dict, float]]
+            contriever_results: Contriever 检索结果，格式为 List[Tuple[Dict, float]]
+            k: RRF 平滑参数，默认 60
+            top_k: 返回文档数量，默认 3
+            
+        Returns:
+            融合后的检索结果，格式为 List[Tuple[Dict, float]]
+        
+        使用示例：
+            # 已有检索结果
+            bm25_results = bm25_retriever.retrieve(query, top_k=6)
+            contriever_results = contriever_retriever.retrieve(query, top_k=6)
+            
+            # 直接融合，无需重复检索
+            hybrid_results = HybridRRFRetriever.fuse_results(
+                bm25_results, contriever_results, k=60, top_k=3
+            )
+        """
+        fused_results = reciprocal_rank_fusion(
+            [bm25_results, contriever_results],
+            k=k
+        )
+        return fused_results[:top_k]
     
     def get_individual_results(self, query: str, top_k: int = 3) -> Dict[str, List[Tuple[Dict, float]]]:
         """
@@ -1452,14 +1532,75 @@ def evaluate(rag_system: RAGSystem, examples: List[Dict]) -> Dict:
     }
 
 
+def collect_retrieval_results(
+    retriever,
+    examples: List[Dict],
+    top_k: int = 6
+) -> Dict[str, List[Tuple[Dict, float]]]:
+    """
+    收集检索器对所有示例的检索结果
+    
+    用于在对比实验中复用检索结果，避免重复执行检索。
+    特别是在评估 HybridRRFRetriever 时，可以先收集 BM25 和 Contriever 的结果，
+    然后设置缓存，使 Hybrid 检索器直接使用已有结果进行融合。
+    
+    Args:
+        retriever: 检索器实例
+        examples: 示例列表，每个包含 'question' 字段
+        top_k: 检索文档数量（建议设为最终 top_k 的 2 倍，以便融合时有足够候选）
+        
+    Returns:
+        检索结果字典，格式为 {query: [(doc, score), ...], ...}
+    """
+    results = {}
+    for example in tqdm(examples, desc=f"收集 {retriever.get_name()} 检索结果", ascii=False):
+        query = example['question']
+        results[query] = retriever.retrieve(query, top_k=top_k)
+    return results
+
+
+def evaluate_with_retrieval_cache(
+    rag_system: RAGSystem,
+    examples: List[Dict],
+    retrieval_cache: Dict[str, Dict[str, List[Tuple[Dict, float]]]] = None
+) -> Dict:
+    """
+    使用检索结果缓存评估 RAG 系统
+    
+    当 rag_system.retriever 是 HybridRRFRetriever 时，可以传入已收集的
+    BM25 和 Contriever 检索结果缓存，避免重复检索。
+    
+    Args:
+        rag_system: RAG 系统实例
+        examples: 测试示例列表
+        retrieval_cache: 检索结果缓存，格式为:
+            {"bm25": {query: [(doc, score), ...]}, "contriever": {query: [...]}}
+        
+    Returns:
+        评估结果字典
+    """
+    # 如果有缓存且检索器支持，设置缓存
+    if retrieval_cache and hasattr(rag_system.retriever, 'set_retrieval_cache'):
+        rag_system.retriever.set_retrieval_cache(retrieval_cache)
+    
+    # 执行标准评估
+    result = evaluate(rag_system, examples)
+    
+    # 清除缓存
+    if retrieval_cache and hasattr(rag_system.retriever, 'clear_retrieval_cache'):
+        rag_system.retriever.clear_retrieval_cache()
+    
+    return result
+
+
 # ============================================
 # 主函数
 # ============================================
 
 def main():
     parser = argparse.ArgumentParser(description="RAG 系统实验")
-    parser.add_argument("--retriever", type=str, default="bm25", choices=["bm25", "contriever", "both"],
-                        help="检索方法选择")
+    parser.add_argument("--retriever", type=str, default="bm25", choices=["bm25", "contriever", "hybrid", "both", "all"],
+                        help="检索方法选择: bm25, contriever, hybrid, both(bm25+contriever), all(三种全部)")
     parser.add_argument("--subset", type=int, default=Config.SUBSET_SIZE,
                         help="测试样本数量")
     parser.add_argument("--top_k", type=int, default=Config.RETRIEVAL_K,
@@ -1505,15 +1646,27 @@ def main():
     # 2. 初始化检索器
     retrievers = {}
     
-    if args.retriever in ["bm25", "both"]:
+    if args.retriever in ["bm25", "both", "all"]:
         bm25_cache = os.path.join(Config.CACHE_DIR, "bm25_index_finance.pkl")
         retrievers["bm25"] = BM25Retriever(corpus, cache_path=bm25_cache)
     
-    if args.retriever in ["contriever", "both"]:
+    if args.retriever in ["contriever", "both", "all"]:
         contriever_cache = os.path.join(Config.CACHE_DIR, "contriever_embeddings_finance.pkl")
         retrievers["contriever"] = ContrieverRetriever(
             corpus, 
             cache_path=contriever_cache,
+            device=args.device
+        )
+    
+    if args.retriever in ["hybrid", "all"]:
+        # Hybrid RRF 混合检索器
+        bm25_for_hybrid = retrievers.get("bm25")
+        contriever_for_hybrid = retrievers.get("contriever")
+        retrievers["hybrid"] = HybridRRFRetriever(
+            documents=corpus,
+            bm25_retriever=bm25_for_hybrid,
+            contriever_retriever=contriever_for_hybrid,
+            cache_dir=Config.CACHE_DIR,
             device=args.device
         )
     
@@ -1588,7 +1741,7 @@ def run_comparison_experiment(
     model_path: str = None
 ) -> Dict:
     """
-    Colab 专用函数：运行 BM25 vs Contriever 对比实验 (FinanceBench)
+    Colab 专用函数：运行检索器对比实验 (FinanceBench)
     
     在 Colab 中直接调用：
         # 使用云端 API
@@ -1603,6 +1756,12 @@ def run_comparison_experiment(
         
         # 快速调试：只用 BM25（跳过 Contriever 模型下载）
         results = run_comparison_experiment(use_retrievers=["bm25"])
+        
+        # 使用 Hybrid RRF 混合检索
+        results = run_comparison_experiment(use_retrievers=["hybrid"])
+        
+        # 对比所有检索器
+        results = run_comparison_experiment(use_retrievers=["bm25", "contriever", "hybrid"])
     
     Args:
         subset_size: 测试样本数量，默认 50
@@ -1610,7 +1769,7 @@ def run_comparison_experiment(
         model: API 模型名称，默认 "qwen-plus" (仅当 generator_type="api" 时有效)
         api_key: DashScope API Key（如未提供，从环境变量读取）
         device: 运行设备（默认自动检测）
-        use_retrievers: 要使用的检索器列表，可选 ["bm25", "contriever"]，默认两者都用
+        use_retrievers: 要使用的检索器列表，可选 ["bm25", "contriever", "hybrid"]，默认 ["bm25", "contriever", "hybrid"]
         generator_type: 生成器类型，"api" 或 "local"（向后兼容: "qwen"=api, "llama"=local）
         model_path: 本地模型路径 (仅当 generator_type="local" 时有效)
         
@@ -1630,7 +1789,7 @@ def run_comparison_experiment(
         device = "cuda" if torch.cuda.is_available() else "cpu"
     
     print("=" * 70)
-    print("🚀 RAG 系统对比实验 - FinanceBench (BM25 vs Contriever)")
+    print("🚀 RAG 系统对比实验 - FinanceBench (BM25 / Contriever / HybridRRF)")
     print("=" * 70)
     print(f"测试样本: {subset_size}")
     print(f"Top-K: {top_k}")
@@ -1649,9 +1808,9 @@ def run_comparison_experiment(
     os.makedirs(Config.CACHE_DIR, exist_ok=True)
     os.makedirs(Config.RESULTS_DIR, exist_ok=True)
     
-    # 默认使用两个检索器
+    # 默认使用三个检索器
     if use_retrievers is None:
-        use_retrievers = ["bm25", "contriever"]
+        use_retrievers = ["bm25", "contriever", "hybrid"]
     use_retrievers = [r.lower() for r in use_retrievers]
     
     # 2. 初始化检索器
@@ -1679,6 +1838,30 @@ def run_comparison_experiment(
         )
         retrievers.append(("Contriever", contriever_retriever))
     
+    # Hybrid RRF - 整合 BM25 和 Contriever
+    if "hybrid" in use_retrievers:
+        print("\n[HybridRRF] 初始化 Hybrid RRF 混合检索器...")
+        # 检查是否已经初始化了子检索器
+        bm25_for_hybrid = None
+        contriever_for_hybrid = None
+        
+        for name, retriever in retrievers:
+            if name == "BM25":
+                bm25_for_hybrid = retriever
+            elif name == "Contriever":
+                contriever_for_hybrid = retriever
+        
+        
+        # 如果子检索器未初始化，则创建临时变量供 HybridRRFRetriever 内部初始化
+        hybrid_retriever = HybridRRFRetriever(
+            documents=corpus,
+            bm25_retriever=bm25_for_hybrid,
+            contriever_retriever=contriever_for_hybrid,
+            cache_dir=Config.CACHE_DIR,
+            device=device
+        )
+        retrievers.append(("HybridRRF", hybrid_retriever))
+    
     # 3. 初始化生成器
     print(f"\n🤖 初始化生成器: {generator_type.upper()}")
     if generator_type == "local":
@@ -1692,6 +1875,36 @@ def run_comparison_experiment(
     # 4. 运行实验
     results = {}
     
+    # 如果同时有 BM25、Contriever 和 Hybrid，预收集检索结果以避免重复检索
+    retrieval_cache = None
+    retriever_names = [name for name, _ in retrievers]
+    if "BM25" in retriever_names and "Contriever" in retriever_names and "HybridRRF" in retriever_names:
+        print("\n" + "="*70)
+        print("📦 预收集 BM25 和 Contriever 检索结果（避免 Hybrid 重复检索）")
+        print("="*70)
+        
+        # 找到 BM25 和 Contriever 检索器
+        bm25_retriever_obj = None
+        contriever_retriever_obj = None
+        for name, retriever in retrievers:
+            if name == "BM25":
+                bm25_retriever_obj = retriever
+            elif name == "Contriever":
+                contriever_retriever_obj = retriever
+        
+        
+        # 收集检索结果（fetch_k = top_k * 2，为融合提供足够候选）
+        fetch_k = top_k * 2
+        bm25_results_cache = collect_retrieval_results(bm25_retriever_obj, examples, top_k=fetch_k)
+        contriever_results_cache = collect_retrieval_results(contriever_retriever_obj, examples, top_k=fetch_k)
+        
+        # 组装缓存
+        retrieval_cache = {
+            'bm25': bm25_results_cache,
+            'contriever': contriever_results_cache
+        }
+        print(f"✅ 已收集 {len(bm25_results_cache)} 个查询的检索结果缓存")
+    
     for name, retriever in retrievers:
         print(f"\n{'='*70}")
         print(f"🔬 测试配置: {name} + {model}")
@@ -1700,8 +1913,11 @@ def run_comparison_experiment(
         # 创建 RAG 系统
         rag = RAGSystem(retriever, generator, top_k=top_k)
         
-        # 评估
-        eval_result = evaluate(rag, examples)
+        # 评估（对于 Hybrid 使用缓存）
+        if name == "HybridRRF" and retrieval_cache is not None:
+            eval_result = evaluate_with_retrieval_cache(rag, examples, retrieval_cache)
+        else:
+            eval_result = evaluate(rag, examples)
         results[name] = eval_result
         
         # 打印单次结果
